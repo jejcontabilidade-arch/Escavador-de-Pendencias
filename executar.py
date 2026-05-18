@@ -878,168 +878,181 @@ def main():
         
     state_file = "state.json"
     
-    # Se o usuário passou --login na linha de comando, ou se o arquivo state.json não existe, força o login manual
-    forçar_login = "--login" in sys.argv
-    if forçar_login or not os.path.exists(state_file):
-        if not os.path.exists(state_file):
-            log("Sessão ativa não encontrada ('state.json'). Precisamos logar uma vez para salvar o acesso.", "INFO")
-        else:
-            log("Forçando renovação da sessão ativa conforme solicitado...", "INFO")
-            
-        sucesso = realizar_login_manual(config)
-        if not sucesso:
-            log("Falha ao salvar a sessão autenticada. A execução da varredura foi cancelada.", "ERROR")
-            return
-            
-    # Identificar procurador pelo arquivo .pfx (usamos para evitar re-troca de perfil se for o próprio)
-    import glob
-    import re
-    pfx_files = glob.glob("*.pfx")
-    procurador_cnpj = ""
-    if pfx_files:
-        filename = os.path.basename(pfx_files[0])
-        # Extrair CNPJ usando regex para buscar qualquer sequência de 14 dígitos consecutivos
-        match = re.search(r"\d{14}", filename)
-        if match:
-            procurador_cnpj = match.group(0)
-    log(f"CNPJ do Procurador detectado: {procurador_cnpj or 'Não identificado'}", "INFO")
-    
-    log(f"Iniciando rotina de processamento para {len([c for c in clientes if c['ativo']])} clientes ativos...", "INFO")
-    
-    success_count = 0
-    failure_count = 0
-    skipped_count = 0
-    
-    with sync_playwright() as p:
-        log("Iniciando navegador Google Chrome para executar a varredura automática...", "SYSTEM")
-        
-        try:
-            browser = p.chromium.launch(
-                headless=config["headless"],
-                channel="chrome",
-                args=["--disable-blink-features=AutomationControlled"]
-            )
-        except Exception as e:
-            log(f"Não foi possível iniciar o Chrome nativo ({e}). Usando Chromium padrão...", "WARNING")
-            browser = p.chromium.launch(
-                headless=config["headless"],
-                args=["--disable-blink-features=AutomationControlled"]
-            )
-            
-        # Carregamos a sessão salva anteriormente!
-        log(f"Carregando sessão autenticada a partir de '{state_file}'...", "INFO")
-        try:
-            context = browser.new_context(
-                storage_state=state_file,
-                viewport={"width": 1280, "height": 800}
-            )
-        except Exception as e:
-            log(f"Erro ao carregar o arquivo de sessão '{state_file}': {e}. Removendo o arquivo para recriá-lo.", "WARNING")
-            if os.path.exists(state_file):
-                os.remove(state_file)
-            browser.close()
-            # Tenta logar de novo chamando main recursivamente
-            return main()
-            
-        page = context.new_page()
-        
-        # Acessar diretamente a página inicial do e-CAC (já autenticado!)
-        log("Acessando portal e-CAC (reutilizando sessão ativa)...", "ACTION")
-        page.goto("https://cav.receita.fazenda.gov.br/ecac/")
-        
-        # Validar se a sessão ainda está ativa
-        try:
-            # Espera até 10 segundos para ver se o painel carrega diretamente.
-            # Se a sessão expirou, o e-CAC redirecionará para a tela de login.
-            page.wait_for_selector("text=Alterar perfil de acesso", timeout=10000)
-            log("Sessão autenticada validada e ativa com sucesso!", "SUCCESS")
-        except Exception:
-            log("A sessão salva expirou ou foi invalidada pela Receita Federal. Precisamos renovar o login.", "WARNING")
-            if os.path.exists(state_file):
-                os.remove(state_file)
-            browser.close()
-            return main()
-            
-        # 2. Iterar sobre a lista de clientes
-        for cliente in clientes:
-            cnpj = cliente["cnpj"]
-            nome = cliente["nome"]
-            ativo = cliente["ativo"]
-            
-            if not ativo:
-                log(f"Cliente {nome} ({cnpj}) está inativo no CSV. Ignorando.", "INFO")
-                skipped_count += 1
-                continue
+    while True:
+        # Se o usuário passou --login na linha de comando, ou se o arquivo state.json não existe, força o login manual
+        forçar_login = "--login" in sys.argv
+        if forçar_login or not os.path.exists(state_file):
+            if not os.path.exists(state_file):
+                log("Sessão ativa não encontrada ('state.json'). Precisamos logar uma vez para salvar o acesso.", "INFO")
+            else:
+                log("Forçando renovação da sessão ativa conforme solicitado...", "INFO")
                 
-            log(f"Processando Cliente: {nome} ({cnpj})...", "INFO")
-            
-            # Criar diretório para salvar o relatório do cliente (já inicializa como pendente)
-            client_dir = save_client_status(config["relatorios_dir"], cnpj, nome, "Pendente", "Iniciado")
+            sucesso = realizar_login_manual(config)
+            if not sucesso:
+                log("Falha ao salvar a sessão autenticada. A execução da varredura foi cancelada.", "ERROR")
+                return
+                
+        # Identificar procurador pelo arquivo .pfx (usamos para evitar re-troca de perfil se for o próprio)
+        import glob
+        import re
+        pfx_files = glob.glob("*.pfx")
+        procurador_cnpj = ""
+        if pfx_files:
+            filename = os.path.basename(pfx_files[0])
+            # Extrair CNPJ usando regex para buscar qualquer sequência de 14 dígitos consecutivos
+            match = re.search(r"\d{14}", filename)
+            if match:
+                procurador_cnpj = match.group(0)
+        log(f"CNPJ do Procurador detectado: {procurador_cnpj or 'Não identificado'}", "INFO")
+        
+        log(f"Iniciando rotina de processamento para {len([c for c in clientes if c['ativo']])} clientes ativos...", "INFO")
+        
+        success_count = 0
+        failure_count = 0
+        skipped_count = 0
+        
+        need_restart = False
+        
+        with sync_playwright() as p:
+            log("Iniciando navegador Google Chrome para executar a varredura automática...", "SYSTEM")
             
             try:
-                # 1. Verificar qual é o perfil atualmente ativo na tela do e-CAC
-                # Fazemos isso de forma ultra-confiável analisando o texto do cabeçalho
-                header_text = page.locator("body").inner_text()
-                header_text_limpo = header_text.replace(".", "").replace("/", "").replace("-", "").replace(" ", "").replace("\n", "").replace("\r", "")
-                
-                cnpj_sem_formatacao = cnpj.replace(".", "").replace("/", "").replace("-", "")
-                
-                # Caso A: O cliente que queremos consultar é o próprio procurador (JEJ)
-                if procurador_cnpj and cnpj == procurador_cnpj:
-                    # Se houver a palavra "Procuradorde" ativa na tela, significa que não estamos sob o perfil Titular!
-                    if "Procuradorde" in header_text_limpo:
-                        log(f"Perfil atual não é Titular. Solicitando alteração de perfil para voltar ao Titular ({nome})...", "INFO")
-                        alterar_perfil(page, cnpj, procurador_cnpj)
-                    else:
-                        log(f"Já estamos no perfil Titular do procurador ({nome}). Consultando diretamente.", "INFO")
-                        
-                # Caso B: O cliente que queremos consultar é uma empresa representada (Tome & Lopes)
-                else:
-                    # Se o CNPJ desta empresa já estiver ativo no cabeçalho do e-CAC, pulamos a troca!
-                    if cnpj_sem_formatacao in header_text_limpo:
-                        log(f"O perfil ativo no e-CAC já corresponde a {nome} ({cnpj}). Pulando alteração de perfil.", "SUCCESS")
-                    else:
-                        log(f"Perfil atual diferente de {nome}. Alterando perfil para o CNPJ: {cnpj}...", "INFO")
-                        alterar_perfil(page, cnpj, procurador_cnpj)
-                    
-                # Acessar Situação Fiscal e baixar relatório
-                resultado = baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config)
-                
-                # Salvar metadados de sucesso
-                save_client_status(config["relatorios_dir"], cnpj, nome, "Sucesso", resultado)
-                success_count += 1
-                
+                browser = p.chromium.launch(
+                    headless=config["headless"],
+                    channel="chrome",
+                    args=["--disable-blink-features=AutomationControlled"]
+                )
             except Exception as e:
-                log(f"Erro ao processar cliente {nome} ({cnpj}): {e}", "ERROR")
+                log(f"Não foi possível iniciar o Chrome nativo ({e}). Usando Chromium padrão...", "WARNING")
+                browser = p.chromium.launch(
+                    headless=config["headless"],
+                    args=["--disable-blink-features=AutomationControlled"]
+                )
                 
-                # Capturar screenshot do erro para diagnóstico visual na pasta do cliente
-                try:
-                    screenshot_path = os.path.join(client_dir, "erro_execucao.png")
-                    page.screenshot(path=screenshot_path)
-                    log(f"Screenshot do erro capturado e salvo em: {screenshot_path}", "INFO")
-                except Exception as snap_err:
-                    log(f"Não foi possível capturar screenshot do erro: {snap_err}", "WARNING")
+            # Carregamos a sessão salva anteriormente!
+            log(f"Carregando sessão autenticada a partir de '{state_file}'...", "INFO")
+            try:
+                context = browser.new_context(
+                    storage_state=state_file,
+                    viewport={"width": 1280, "height": 800}
+                )
+            except Exception as e:
+                log(f"Erro ao carregar o arquivo de sessão '{state_file}': {e}. Removendo o arquivo para recriá-lo.", "WARNING")
+                if os.path.exists(state_file):
+                    os.remove(state_file)
+                browser.close()
+                need_restart = True
                 
-                # Salvar log de erro para o cliente
-                try:
-                    save_client_status(config["relatorios_dir"], cnpj, nome, "Erro", str(e))
-                except Exception as save_err:
-                    log(f"Não foi possível salvar status de erro para o cliente: {save_err}", "WARNING")
-                failure_count += 1
+            if not need_restart:
+                page = context.new_page()
                 
-            finally:
-                # Voltar a página do e-CAC para o painel principal
-                # Sempre navegamos de volta para a URL principal do e-CAC para resetar o estado visual do menu lateral
+                # Acessar diretamente a página inicial do e-CAC (já autenticado!)
+                log("Acessando portal e-CAC (reutilizando sessão ativa)...", "ACTION")
                 try:
-                    log("Retornando para a página inicial do e-CAC...", "ACTION")
-                    page.goto(config["portal_url"])
-                    # Usamos o seletor nativo do Playwright para o texto "Alterar perfil de acesso"
-                    page.wait_for_selector("text=Alterar perfil de acesso", timeout=10000)
-                except Exception as nav_err:
-                    log(f"Erro ao retornar para a página inicial: {nav_err}. Tentando prosseguir.", "WARNING")
+                    page.goto("https://cav.receita.fazenda.gov.br/ecac/")
                     
-        browser.close()
-        
+                    # Validar se a sessão ainda está ativa
+                    # Espera até 10 segundos para ver se o painel carrega diretamente.
+                    # Se a sessão expirou, o e-CAC redirecionará para a tela de login.
+                    page.wait_for_selector("text=Alterar perfil de acesso", timeout=10000)
+                    log("Sessão autenticada validada e ativa com sucesso!", "SUCCESS")
+                except Exception:
+                    log("A sessão salva expirou ou foi invalidada pela Receita Federal. Precisamos renovar o login.", "WARNING")
+                    if os.path.exists(state_file):
+                        os.remove(state_file)
+                    browser.close()
+                    need_restart = True
+                    
+            if not need_restart:
+                # 2. Iterar sobre a lista de clientes
+                for cliente in clientes:
+                    cnpj = cliente["cnpj"]
+                    nome = cliente["nome"]
+                    ativo = cliente["ativo"]
+                    
+                    if not ativo:
+                        log(f"Cliente {nome} ({cnpj}) está inativo no CSV. Ignorando.", "INFO")
+                        skipped_count += 1
+                        continue
+                        
+                    log(f"Processando Cliente: {nome} ({cnpj})...", "INFO")
+                    
+                    # Criar diretório para salvar o relatório do cliente (já inicializa como pendente)
+                    client_dir = save_client_status(config["relatorios_dir"], cnpj, nome, "Pendente", "Iniciado")
+                    
+                    try:
+                        # 1. Verificar qual é o perfil atualmente ativo na tela do e-CAC
+                        # Fazemos isso de forma ultra-confiável analisando o texto do cabeçalho
+                        header_text = page.locator("body").inner_text()
+                        header_text_limpo = header_text.replace(".", "").replace("/", "").replace("-", "").replace(" ", "").replace("\n", "").replace("\r", "")
+                        
+                        cnpj_sem_formatacao = cnpj.replace(".", "").replace("/", "").replace("-", "")
+                        
+                        # Caso A: O cliente que queremos consultar é o próprio procurador (JEJ)
+                        if procurador_cnpj and cnpj == procurador_cnpj:
+                            # Se houver a palavra "Procuradorde" ativa na tela, significa que não estamos sob o perfil Titular!
+                            if "Procuradorde" in header_text_limpo:
+                                log(f"Perfil atual não é Titular. Solicitando alteração de perfil para voltar ao Titular ({nome})...", "INFO")
+                                alterar_perfil(page, cnpj, procurador_cnpj)
+                            else:
+                                log(f"Já estamos no perfil Titular do procurador ({nome}). Consultando diretamente.", "INFO")
+                                
+                        # Caso B: O cliente que queremos consultar é uma empresa representada (Tome & Lopes)
+                        else:
+                            # Se o CNPJ desta empresa já estiver ativo no cabeçalho do e-CAC, pulamos a troca!
+                            if cnpj_sem_formatacao in header_text_limpo:
+                                log(f"O perfil ativo no e-CAC já corresponde a {nome} ({cnpj}). Pulando alteração de perfil.", "SUCCESS")
+                            else:
+                                log(f"Perfil atual diferente de {nome}. Alterando perfil para o CNPJ: {cnpj}...", "INFO")
+                                alterar_perfil(page, cnpj, procurador_cnpj)
+                            
+                        # Acessar Situação Fiscal e baixar relatório
+                        resultado = baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config)
+                        
+                        # Salvar metadados de sucesso
+                        save_client_status(config["relatorios_dir"], cnpj, nome, "Sucesso", resultado)
+                        success_count += 1
+                        
+                    except Exception as e:
+                        log(f"Erro ao processar cliente {nome} ({cnpj}): {e}", "ERROR")
+                        
+                        # Capturar screenshot do erro para diagnóstico visual na pasta do cliente
+                        try:
+                            screenshot_path = os.path.join(client_dir, "erro_execucao.png")
+                            page.screenshot(path=screenshot_path)
+                            log(f"Screenshot do erro capturado e salvo em: {screenshot_path}", "INFO")
+                        except Exception as snap_err:
+                            log(f"Não foi possível capturar screenshot do erro: {snap_err}", "WARNING")
+                        
+                        # Salvar log de erro para o cliente
+                        try:
+                            save_client_status(config["relatorios_dir"], cnpj, nome, "Erro", str(e))
+                        except Exception as save_err:
+                            log(f"Não foi possível salvar status de erro para o cliente: {save_err}", "WARNING")
+                        failure_count += 1
+                        
+                    finally:
+                        # Voltar a página do e-CAC para o painel principal
+                        # Sempre navegamos de volta para a URL principal do e-CAC para resetar o estado visual do menu lateral
+                        try:
+                            log("Retornando para a página inicial do e-CAC...", "ACTION")
+                            page.goto(config["portal_url"])
+                            # Usamos o seletor nativo do Playwright para o texto "Alterar perfil de acesso"
+                            page.wait_for_selector("text=Alterar perfil de acesso", timeout=10000)
+                        except Exception as nav_err:
+                            log(f"Erro ao retornar para a página inicial: {nav_err}. Tentando prosseguir.", "WARNING")
+                            
+                browser.close()
+                
+        if need_restart:
+            # Evita loops infinitos de login manual se o argumento --login estiver na linha de comando
+            if "--login" in sys.argv:
+                sys.argv.remove("--login")
+            log("Sessão limpa e resetada. Reiniciando fluxo de login manual...", "INFO")
+            continue
+        else:
+            break
+            
     # Gerar Painel Excel Consolidado J&J Contabilidade
     hoje_limpo = datetime.date.today().strftime("%Y%m%d")
     output_excel = os.path.join(
