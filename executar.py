@@ -826,11 +826,9 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config):
 
 def realizar_login_manual(config):
     log("=" * 60, "LOGIN")
-    log(" INICIANDO MODO DE AUTENTICAÇÃO MANUAL E-CAC", "LOGIN")
+    log(" INICIANDO MODO DE AUTENTICAÇÃO E-CAC (100% AUTOMATIZADO)", "LOGIN")
     log("=" * 60, "LOGIN")
-    log("Um navegador Google Chrome visível será aberto.", "INFO")
-    log("Por favor, clique em 'Entrar com gov.br' e selecione o seu certificado digital na tela.", "IMPORTANT")
-    log("Aguardando você concluir o login manualmente no e-CAC (limite de 5 minutos)...", "IMPORTANT")
+    log("Um navegador Google Chrome visível será aberto e tentará o login automaticamente...", "INFO")
     
     state_file = "state.json"
     with sync_playwright() as p:
@@ -853,10 +851,45 @@ def realizar_login_manual(config):
         # Acessa e-CAC
         page.goto("https://cav.receita.fazenda.gov.br/ecac/")
         
+        # 1. Aguarda 2 segundos após carregar a página e clica automaticamente no botão de login do Gov.br
+        try:
+            log("Página carregada. Aguardando exatamente 2 segundos para iniciar...", "INFO")
+            page.wait_for_timeout(2000)
+            
+            log("Buscando o botão de login 'Acesso Gov BR'...", "INFO")
+            page.wait_for_selector('input[alt="Acesso Gov BR"]', timeout=10000)
+            log("Clicando no botão de login do Gov.br...", "ACTION")
+            page.click('input[alt="Acesso Gov BR"]')
+            
+            # 2. Aguarda redirecionamento para o Gov.br SSO e o botão "Seu certificado digital"
+            log("Aguardando redirecionamento para o portal Gov.br...", "INFO")
+            page.wait_for_selector('button#login-certificate, #login-certificate', timeout=15000)
+            log("Botão 'Seu certificado digital' (#login-certificate) detectado!", "SUCCESS")
+            
+            # 3. Disparar thread em background para simular o ENTER no diálogo do Windows
+            import threading
+            def auto_confirm_dialog():
+                time.sleep(3.5)
+                log("[AUTO-LOGIN] Janela de seleção do Windows deve estar aberta. Simulando ENTER...", "SYSTEM")
+                press_enter()
+                # Envia um segundo ENTER por segurança após 1.2 segundos caso o foco tenha demorado
+                time.sleep(1.2)
+                press_enter()
+                
+            threading.Thread(target=auto_confirm_dialog, daemon=True).start()
+            
+            log("Clicando no botão 'Seu certificado digital' e aguardando confirmação do Windows...", "ACTION")
+            page.click('button#login-certificate')
+            
+        except Exception as auto_err:
+            log(f"Aviso no fluxo automático: {auto_err}", "WARNING")
+            log("Fluxo automático falhou ou parou. Por favor, conclua o login manualmente na tela se necessário.", "IMPORTANT")
+            
         try:
             # Aguarda o elemento do cabeçalho do e-CAC aparecer (máximo 5 minutos)
+            # Isso serve tanto para o fluxo 100% automático quanto para o manual em caso de fallback!
             page.wait_for_selector("text=Alterar perfil de acesso", timeout=300000)
-            log("Conexão e login manuais detectados com sucesso no e-CAC!", "SUCCESS")
+            log("Conexão e login detectados com sucesso no e-CAC!", "SUCCESS")
             
             # Salvar o estado da sessão em state.json
             context.storage_state(path=state_file)
@@ -864,7 +897,7 @@ def realizar_login_manual(config):
             browser.close()
             return True
         except Exception as e:
-            log(f"Tempo limite de 5 minutos excedido ou erro no login manual: {e}", "ERROR")
+            log(f"Tempo limite de 5 minutos excedido ou erro no login: {e}", "ERROR")
             browser.close()
             return False
 
