@@ -1,0 +1,50 @@
+# ==============================================================================
+# ESCANER DE PENDÊNCIAS E-CAC - GITIGNORE (SENIOR STANDARD)
+# ==============================================================================
+
+# --- Credenciais e Segurança (CRÍTICO) ---
+state.json
+*.pfx
+*.p12
+*.pem
+*.key
+.env
+config_private.json
+
+# --- Dados de Execução e Relatórios Contábeis ---
+logs/
+relatorios/
+*.log
+
+# --- Ambiente Virtual e Dependências ---
+venv/
+.venv/
+env/
+ActiveState.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Cache do Playwright e Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.playwright/
+ms-playwright/
+
+# --- Arquivos Temporários de Sistema ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.tmp
+*.bak
+*.swp
+~*
+
+# --- Relatórios Gerados e Dumps de Texto ---
+*.xlsx
+pdf_content.txt
+excel_details.txt

@@ -1,0 +1,9 @@
+{
+    "headless": false,
+    "timeout_ms": 30000,
+    "relatorios_dir": "relatorios",
+    "clientes_file": "clientes.csv",
+    "portal_url": "https://cav.receita.fazenda.gov.br/ecac/",
+    "cert_first_char": "J",
+    "download_timeout_ms": 60000
+}
