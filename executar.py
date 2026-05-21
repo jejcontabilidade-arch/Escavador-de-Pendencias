@@ -5,6 +5,7 @@ import time
 import json
 import ctypes
 import datetime
+import requests
 from playwright.sync_api import sync_playwright, TimeoutError
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
