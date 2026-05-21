@@ -91,6 +91,31 @@ def save_config(config):
 def index():
     return render_template("index.html")
 
+# Rotas de suporte ao PWA na raiz
+@app.route("/manifest.json")
+def serve_manifest():
+    return send_from_directory(os.path.join(app.root_path, 'static'), 'manifest.json')
+
+@app.route("/service-worker.js")
+def serve_service_worker():
+    response = send_from_directory(os.path.join(app.root_path, 'static'), 'service-worker.js')
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Content-Type'] = 'application/javascript'
+    return response
+
+# Rota para encerrar o servidor Flask localmente
+@app.route("/api/encerrar-servidor", methods=["POST"])
+def encerrar_servidor():
+    import signal
+    print("Comando de encerramento recebido. Desligando o servidor Flask local...")
+    try:
+        os.kill(os.getpid(), signal.SIGTERM)
+        return jsonify({"status": "success", "message": "Servidor encerrando..."})
+    except Exception as e:
+        print(f"Erro ao encerrar servidor: {e}")
+        # Fallback de encerramento bruto do processo
+        os._exit(0)
+
 # Rotas de Configuração
 @app.route("/api/config", methods=["GET"])
 def get_config():
