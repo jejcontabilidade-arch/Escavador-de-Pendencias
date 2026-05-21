@@ -1,6 +1,6 @@
 @echo off
 title J&J Contabilidade - Escavador de Pendências e-CAC (Painel Web)
-chcp 65001 > null
+chcp 65001 > NUL
 
 echo ======================================================================
 echo           J&J CONTABILIDADE - ESCAVADOR DE PENDÊNCIAS E-CAC
