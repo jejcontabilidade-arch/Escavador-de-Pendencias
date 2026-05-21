@@ -1,0 +1,1607 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J&J Contabilidade - Escavador de Pendências e-CAC</title>
+    <!-- Google Fonts: Inter & JetBrains Mono para o console -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        /* CSS Variables - Design System */
+        :root {
+            --bg-color: #0b132b;
+            --sidebar-bg: #1c2541;
+            --card-bg: rgba(28, 37, 65, 0.6);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --primary: #3a86c8;
+            --primary-hover: #4ea8de;
+            --accent: #5bc0be;
+            --text-color: #f4f6f9;
+            --text-muted: #8e9aaf;
+            --success: #38b000;
+            --warning: #ffb703;
+            --danger: #d90429;
+            --terminal-bg: #011627;
+            --glass-blur: 12px;
+            --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        /* Reset & Base Styles */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 10% 20%, rgba(58, 134, 200, 0.15) 0px, transparent 50%),
+                radial-gradient(at 90% 80%, rgba(91, 192, 190, 0.1) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-color);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 280px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            z-index: 10;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: #ffffff;
+            box-shadow: 0 4px 15px rgba(58, 134, 200, 0.3);
+        }
+
+        .logo-text h1 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            background: linear-gradient(to right, #ffffff, var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-text p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .nav-links {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-grow: 1;
+        }
+
+        .nav-item button {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 12px 16px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 500;
+            text-align: left;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .nav-item button:hover {
+            color: var(--text-color);
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .nav-item.active button {
+            color: #ffffff;
+            background: linear-gradient(135deg, rgba(58, 134, 200, 0.3), rgba(91, 192, 190, 0.15));
+            border: 1px solid rgba(58, 134, 200, 0.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav-item button svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        .sidebar-footer {
+            margin-top: auto;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-align: center;
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+        }
+
+        /* Main Content Container */
+        .content-container {
+            flex-grow: 1;
+            padding: 40px;
+            overflow-y: auto;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* Tab Content Panel */
+        .tab-panel {
+            display: none;
+            flex-direction: column;
+            gap: 24px;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .tab-panel.active {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Section Header */
+        .section-header {
+            margin-bottom: 8px;
+        }
+
+        .section-header h2 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .section-header p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        /* Card Component (Glassmorphism) */
+        .card {
+            background-color: var(--card-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Dashboard Overview Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(28, 37, 65, 0.8), rgba(28, 37, 65, 0.4));
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background-color: var(--primary);
+        }
+
+        .stat-card.success::before { background-color: var(--success); }
+        .stat-card.warning::before { background-color: var(--warning); }
+        .stat-card.danger::before { background-color: var(--danger); }
+
+        .stat-info h3 {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .stat-info .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .stat-icon {
+            opacity: 0.15;
+            color: #ffffff;
+        }
+
+        .stat-icon svg {
+            width: 40px;
+            height: 40px;
+            fill: currentColor;
+        }
+
+        /* Action Bar / Controls */
+        .controls-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: #ffffff;
+            box-shadow: 0 4px 15px rgba(58, 134, 200, 0.3);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background-color: rgba(255, 255, 255, 0.08);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+            color: #ffffff;
+            box-shadow: 0 4px 15px rgba(217, 4, 41, 0.3);
+        }
+
+        .btn-danger:hover {
+            background-color: #ef233c;
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background-color: var(--success);
+            color: #ffffff;
+        }
+
+        .btn-success:hover {
+            background-color: #43c907;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            width: 100%;
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            height: 14px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            width: 0%;
+            border-radius: 10px;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Terminal Console Log */
+        .terminal-card {
+            background-color: var(--terminal-bg);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: #e2e8f0;
+            height: 380px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
+            scroll-behavior: smooth;
+        }
+
+        .terminal-line {
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .terminal-line.info { color: #81a1c1; }
+        .terminal-line.success { color: #a3be8c; font-weight: 500; }
+        .terminal-line.warning { color: #ebcb8b; }
+        .terminal-line.error { color: #bf616a; font-weight: 600; }
+        .terminal-line.system { color: #b48ead; }
+        .terminal-line.action { color: #88c0d0; }
+        .terminal-line.summary { color: #8fbcbb; font-weight: 600; border-top: 1px dashed rgba(255, 255, 255, 0.1); padding-top: 4px; margin-top: 4px; }
+
+        /* Search & Form Elements */
+        .search-container {
+            position: relative;
+            flex-grow: 1;
+            max-width: 400px;
+        }
+
+        .form-input {
+            width: 100%;
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 16px;
+            color: var(--text-color);
+            font-family: inherit;
+            font-size: 0.9rem;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .form-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(58, 134, 200, 0.25);
+            background-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .search-container .form-input {
+            padding-left: 40px;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            display: flex;
+        }
+
+        .search-icon svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* Toggle Switches */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 46px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.15);
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        input:checked + .slider {
+            background-color: var(--success);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+
+        /* Tables */
+        .table-wrapper {
+            max-height: 480px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            text-align: left;
+        }
+
+        th {
+            background-color: rgba(28, 37, 65, 0.9);
+            position: sticky;
+            top: 0;
+            padding: 14px 18px;
+            font-weight: 600;
+            color: var(--text-color);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1;
+        }
+
+        td {
+            padding: 12px 18px;
+            border-bottom: 1px solid var(--border-color);
+            color: #d1d5db;
+        }
+
+        tr:hover td {
+            background-color: rgba(255, 255, 255, 0.02);
+            color: #ffffff;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-success { background-color: rgba(56, 176, 0, 0.15); color: #38b000; border: 1px solid rgba(56, 176, 0, 0.3); }
+        .badge-danger { background-color: rgba(217, 4, 41, 0.15); color: #d90429; border: 1px solid rgba(217, 4, 41, 0.3); }
+        .badge-warning { background-color: rgba(255, 183, 3, 0.15); color: #ffb703; border: 1px solid rgba(255, 183, 3, 0.3); }
+
+        /* Configuration Forms Grid */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-row-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+        }
+
+        /* Modal Dialogs */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: #121b33;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 30px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            animation: modalSlide 0.3s ease;
+        }
+
+        @keyframes modalSlide {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .modal-header h3 {
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        /* Dynamic Status Indicator Animation */
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            background-color: var(--text-muted);
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-dot.active {
+            background-color: var(--success);
+            box-shadow: 0 0 8px var(--success);
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.6; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Floating Notification Toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 16px 24px;
+            border-radius: 8px;
+            background-color: #121b33;
+            border: 1px solid var(--border-color);
+            color: #ffffff;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success { border-left: 4px solid var(--success); }
+        .toast.error { border-left: 4px solid var(--danger); }
+        .toast.warning { border-left: 4px solid var(--warning); }
+
+        /* Loader Icon Rotation */
+        .spinner {
+            animation: spin 1s infinite linear;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Actions Column Alignment */
+        .action-btns {
+            display: flex;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="logo-container">
+            <div class="logo-icon">J</div>
+            <div class="logo-text">
+                <h1>J&J Contabilidade</h1>
+                <p>Escavador de Pendências</p>
+            </div>
+        </div>
+
+        <ul class="nav-links">
+            <li class="nav-item active" id="nav-dashboard">
+                <button onclick="switchTab('dashboard')">
+                    <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                    Painel Principal
+                </button>
+            </li>
+            <li class="nav-item" id="nav-clientes">
+                <button onclick="switchTab('clientes')">
+                    <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 5 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                    Gerenciar Clientes
+                </button>
+            </li>
+            <li class="nav-item" id="nav-relatorios">
+                <button onclick="switchTab('relatorios')">
+                    <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+                    Downloads
+                </button>
+            </li>
+            <li class="nav-item" id="nav-config">
+                <button onclick="switchTab('config')">
+                    <svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12c0,0.31,0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+                    Configurações
+                </button>
+            </li>
+        </ul>
+
+        <div class="sidebar-footer">
+            <p>Willian Batista Oliveira</p>
+            <p>J&J Contabilidade © 2026</p>
+            <p style="margin-top: 4px; font-size: 0.65rem;">Versão 2.1 (Painel Web)</p>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="content-container">
+        
+        <!-- DASHBOARD TAB -->
+        <section class="tab-panel active" id="panel-dashboard">
+            <div class="section-header">
+                <h2>Painel de Controle</h2>
+                <p>Monitore e execute a automação do Escavador de Pendências e-CAC em tempo real.</p>
+            </div>
+
+            <!-- Stats grid -->
+            <div class="stats-grid">
+                <div class="stat-card" id="card-status-execucao">
+                    <div class="stat-info">
+                        <h3>Status do Robô</h3>
+                        <div class="stat-value" style="display: flex; align-items: center; gap: 10px;">
+                            <span class="status-dot" id="status-dot"></span>
+                            <span id="txt-status-robo">Inativo</span>
+                        </div>
+                    </div>
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+                    </div>
+                </div>
+                <div class="stat-card success">
+                    <div class="stat-info">
+                        <h3>Sucessos hoje</h3>
+                        <div class="stat-value" id="stat-sucessos">0</div>
+                    </div>
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    </div>
+                </div>
+                <div class="stat-card danger">
+                    <div class="stat-info">
+                        <h3>Falhas hoje</h3>
+                        <div class="stat-value" id="stat-falhas">0</div>
+                    </div>
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-info">
+                        <h3>Total Ativos</h3>
+                        <div class="stat-value" id="stat-total">0</div>
+                    </div>
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 5 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Execution Actions -->
+            <div class="card">
+                <div class="controls-row">
+                    <div style="flex-grow: 1;">
+                        <h3 id="lbl-empresa-atual" style="font-size: 1.1rem; margin-bottom: 4px;">Aguardando ação...</h3>
+                        <p id="lbl-detalhes-progresso" style="color: var(--text-muted); font-size: 0.85rem;">Nenhum processo ativo no momento.</p>
+                    </div>
+                    <div class="action-btns">
+                        <button class="btn btn-primary" id="btn-iniciar" onclick="iniciarAutomacao(false)">
+                            <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+                            Iniciar Varredura
+                        </button>
+                        <button class="btn btn-secondary" id="btn-iniciar-login" onclick="iniciarAutomacao(true)" title="Forçar abertura do navegador para login inicial manual caso o token tenha expirado">
+                            Forçar Login Manual
+                        </button>
+                        <button class="btn btn-danger" id="btn-parar" onclick="pararAutomacao()" style="display: none;">
+                            <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24"><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                            Interromper
+                        </button>
+                    </div>
+                </div>
+
+                <div class="progress-container">
+                    <div class="progress-bar" id="progress-bar-val"></div>
+                </div>
+            </div>
+
+            <!-- Terminal Logs Panel -->
+            <div class="card">
+                <div class="controls-row">
+                    <h3>Visualizador de Logs do Terminal (Tempo Real)</h3>
+                    <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;" onclick="limparTerminalGrafico()">Limpar Tela</button>
+                </div>
+                <div class="terminal-card" id="terminal-screen">
+                    <div class="terminal-line system">Console aguardando inicialização da rotina...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CLIENTS TAB -->
+        <section class="tab-panel" id="panel-clientes">
+            <div class="section-header">
+                <h2>Gerenciamento de Clientes</h2>
+                <p>Gerencie a lista de empresas cadastradas no arquivo CSV que serão processadas pelo robô.</p>
+            </div>
+
+            <div class="card">
+                <div class="controls-row">
+                    <div class="search-container">
+                        <span class="search-icon">
+                            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        </span>
+                        <input type="text" class="form-input" id="search-clientes" placeholder="Pesquisar por CNPJ ou nome..." oninput="filtrarClientes()">
+                    </div>
+
+                    <div class="action-btns">
+                        <!-- Import PDF Button -->
+                        <button class="btn btn-secondary" onclick="document.getElementById('pdf-file-input').click()">
+                            <svg style="width: 18px; height: 18px; fill: currentColor;" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                            Importar Férias PDF
+                        </button>
+                        <input type="file" id="pdf-file-input" style="display: none;" accept=".pdf" onchange="importarClientesPdf(event)">
+
+                        <button class="btn btn-primary" onclick="abrirModalCliente()">
+                            <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                            Adicionar Cliente
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Clients list table -->
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>CNPJ</th>
+                                <th>Razão Social / Nome</th>
+                                <th style="text-align: center;">Ativo no Processo</th>
+                                <th style="text-align: right; width: 120px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl-clientes-corpo">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 30px;">Carregando lista de clientes...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- REPORTS TAB -->
+        <section class="tab-panel" id="panel-relatorios">
+            <div class="section-header">
+                <h2>Downloads e Relatórios</h2>
+                <p>Acesse o painel consolidado do Desktop e baixe relatórios/CNDs individuais gerados pela automação.</p>
+            </div>
+
+            <!-- Consolidated Highlight -->
+            <div class="card" style="background: linear-gradient(135deg, rgba(58, 134, 200, 0.2), rgba(91, 192, 190, 0.05)); border: 1px solid rgba(58, 134, 200, 0.3);">
+                <div class="controls-row">
+                    <div>
+                        <h3 style="color: #ffffff; font-size: 1.2rem; margin-bottom: 4px;">Painel Consolidado do Desktop</h3>
+                        <p style="color: var(--text-muted); font-size: 0.9rem;">Esta planilha contém o resumo final e-CAC de todas as empresas e é atualizada automaticamente a cada execução.</p>
+                    </div>
+                    <button class="btn btn-primary" id="btn-download-consolidado" onclick="baixarArquivo('desktop/Painel_Consolidado_Pendencias_eCAC.xlsx')">
+                        <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24"><path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+                        Baixar Excel Consolidado
+                    </button>
+                </div>
+            </div>
+
+            <!-- Document list table -->
+            <div class="card">
+                <div class="controls-row">
+                    <h3>Arquivos Individuais Gerados (PDFs e CNDs)</h3>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" class="form-input" id="search-relatorios" placeholder="Filtrar por empresa ou data..." oninput="filtrarRelatorios()" style="width: 250px;">
+                        <button class="btn btn-secondary" onclick="carregarRelatorios()" title="Atualizar Lista">
+                            Atualizar Lista
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nome do Arquivo</th>
+                                <th>Empresa</th>
+                                <th>Data da Pasta</th>
+                                <th>Modificado em</th>
+                                <th>Tamanho</th>
+                                <th style="text-align: right;">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl-relatorios-corpo">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">Carregando lista de relatórios...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- CONFIGURATIONS TAB -->
+        <section class="tab-panel" id="panel-config">
+            <div class="section-header">
+                <h2>Configurações do Sistema</h2>
+                <p>Ajuste as preferências de execução do robô e configure a integração com o WhatsApp via Z-API.</p>
+            </div>
+
+            <form id="form-config" onsubmit="salvarConfig(event)">
+                <div class="form-grid">
+                    
+                    <!-- General Settings -->
+                    <div class="card">
+                        <h3 style="border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 10px;">Gerais e Navegador</h3>
+                        
+                        <div class="form-group">
+                            <label for="cfg-cert">Caractere Inicial do Certificado</label>
+                            <input type="text" class="form-input" id="cfg-cert" maxlength="1" placeholder="Ex: J" required>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Tecla enviada ao Windows para selecionar o certificado correspondente.</span>
+                        </div>
+
+                        <div class="form-row-checkbox">
+                            <label class="switch">
+                                <input type="checkbox" id="cfg-headless">
+                                <span class="slider"></span>
+                            </label>
+                            <div>
+                                <h4 style="font-size: 0.9rem;">Execução Oculta (Headless)</h4>
+                                <span style="font-size: 0.75rem; color: var(--text-muted);">Rodar sem exibir a janela visual do navegador Chrome.</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="cfg-timeout">Tempo Limite Carregamento (Segundos)</label>
+                            <input type="number" class="form-input" id="cfg-timeout" min="10" max="300" required>
+                        </div>
+                    </div>
+
+                    <!-- WhatsApp Settings (Z-API) -->
+                    <div class="card">
+                        <h3 style="border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 10px;">Notificações WhatsApp (Z-API)</h3>
+                        
+                        <div class="form-row-checkbox">
+                            <label class="switch">
+                                <input type="checkbox" id="cfg-wa-enabled" onchange="toggleWaFields(this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                            <div>
+                                <h4 style="font-size: 0.9rem;">Habilitar Notificações</h4>
+                                <span style="font-size: 0.75rem; color: var(--text-muted);">Disparar resumo de pendências ao final da automação.</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="cfg-wa-number">Número WhatsApp Responsável</label>
+                            <input type="text" class="form-input wa-field" id="cfg-wa-number" placeholder="Ex: 61999999999">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="cfg-wa-instance">Instância Z-API</label>
+                            <input type="text" class="form-input wa-field" id="cfg-wa-instance" placeholder="Código da Instância">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="cfg-wa-token">Token Z-API</label>
+                            <input type="password" class="form-input wa-field" id="cfg-wa-token" placeholder="Token Z-API">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="cfg-wa-client-token">Client Token Z-API (Opcional)</label>
+                            <input type="password" class="form-input wa-field" id="cfg-wa-client-token" placeholder="Client Token Z-API">
+                        </div>
+
+                        <div style="display: flex; gap: 10px; margin-top: 10px;">
+                            <button type="button" class="btn btn-secondary" style="flex-grow: 1;" onclick="testarConexaoWhatsapp()">Testar Envio</button>
+                            <button type="submit" class="btn btn-primary" style="flex-grow: 1;">Salvar Configurações</button>
+                        </div>
+                    </div>
+
+                </div>
+            </form>
+        </section>
+
+    </main>
+
+    <!-- CLIENT MODAL DIALOG -->
+    <div class="modal" id="modal-cliente">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-cliente-titulo">Adicionar Novo Cliente</h3>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+                <div class="form-group">
+                    <label for="modal-input-cnpj">CNPJ do Cliente (apenas números)</label>
+                    <input type="text" class="form-input" id="modal-input-cnpj" maxlength="14" placeholder="Ex: 00000000000000">
+                </div>
+                <div class="form-group">
+                    <label for="modal-input-nome">Razão Social / Nome da Empresa</label>
+                    <input type="text" class="form-input" id="modal-input-nome" placeholder="Ex: Empresa Exemplo Ltda">
+                </div>
+                <div class="form-row-checkbox">
+                    <label class="switch">
+                        <input type="checkbox" id="modal-input-ativo" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <div>
+                        <h4 style="font-size: 0.9rem;">Ativo para processamento</h4>
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">Incluir esta empresa na próxima execução da varredura.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="fecharModalCliente()">Cancelar</button>
+                <button class="btn btn-primary" onclick="salvarModalCliente()">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div class="toast" id="toast-notif">
+        <span id="toast-text">Mensagem do sistema</span>
+    </div>
+
+    <!-- JavaScript Business Logic -->
+    <script>
+        // Active Navigation Tab
+        let activeTab = 'dashboard';
+        let statusIntervalId = null;
+        let listaClientesCache = [];
+        let listaRelatoriosCache = [];
+        let logsIgnoradosCount = 0;
+        let ultimoTamanhoLogs = 0;
+
+        // Inicializar aplicação
+        window.addEventListener('DOMContentLoaded', () => {
+            carregarClientes();
+            carregarRelatorios();
+            carregarConfig();
+            
+            // Iniciar o monitoramento de status recorrente (a cada 2 segundos)
+            obterStatusRobo();
+            statusIntervalId = setInterval(obterStatusRobo, 2000);
+        });
+
+        // Alternador de Abas (Navigation Tabs)
+        function switchTab(tabId) {
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(`nav-${tabId}`).classList.add('active');
+            document.getElementById(`panel-${tabId}`).classList.add('active');
+            activeTab = tabId;
+
+            // Recarregar dados específicos ao entrar nas abas correspondentes
+            if (tabId === 'clientes') {
+                carregarClientes();
+            } else if (tabId === 'relatorios') {
+                carregarRelatorios();
+            }
+        }
+
+        // Show Notifications (Toast messages)
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast-notif');
+            toast.className = `toast show ${type}`;
+            document.getElementById('toast-text').innerText = message;
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 4000);
+        }
+
+        /* --- DASHBOARD LOGIC --- */
+        async function obterStatusRobo() {
+            try {
+                const response = await fetch('/api/executar/status');
+                if (!response.ok) return;
+                const status = await response.json();
+                
+                // Atualizar Status Dot e Texto
+                const dot = document.getElementById('status-dot');
+                const txt = document.getElementById('txt-status-robo');
+                const btnIniciar = document.getElementById('btn-iniciar');
+                const btnIniciarLogin = document.getElementById('btn-iniciar-login');
+                const btnParar = document.getElementById('btn-parar');
+
+                if (status.rodando) {
+                    dot.classList.add('active');
+                    txt.innerText = 'Executando Varredura';
+                    btnIniciar.style.display = 'none';
+                    btnIniciarLogin.style.display = 'none';
+                    btnParar.style.display = 'inline-flex';
+                } else {
+                    dot.classList.remove('active');
+                    txt.innerText = 'Inativo';
+                    btnIniciar.style.display = 'inline-flex';
+                    btnIniciarLogin.style.display = 'inline-flex';
+                    btnParar.style.display = 'none';
+                }
+
+                // Atualizar Estatísticas
+                document.getElementById('stat-sucessos').innerText = status.sucessos;
+                document.getElementById('stat-falhas').innerText = status.falhas;
+                document.getElementById('stat-total').innerText = status.total_clientes;
+
+                // Atualizar progresso e barra
+                const total = status.total_clientes || 1;
+                const proc = status.processados || 0;
+                const pct = Math.min(100, Math.round((proc / total) * 100));
+                
+                document.getElementById('progress-bar-val').style.width = `${pct}%`;
+                
+                if (status.rodando) {
+                    document.getElementById('lbl-empresa-atual').innerText = `Processando: ${status.empresa_atual}`;
+                    document.getElementById('lbl-detalhes-progresso').innerText = `Empresa ${proc} de ${total} (${pct}% concluído) | Sucessos: ${status.sucessos} - Falhas: ${status.falhas}`;
+                } else {
+                    document.getElementById('lbl-empresa-atual').innerText = 'Aguardando início...';
+                    document.getElementById('lbl-detalhes-progresso').innerText = `Último status: ${proc} de ${total} processados.`;
+                }
+
+                // Alimentar Terminal de Logs de forma acumulada e incremental
+                const term = document.getElementById('terminal-screen');
+                if (status.logs && status.logs.length > 0) {
+                    ultimoTamanhoLogs = status.logs.length;
+                    if (status.logs.length < logsIgnoradosCount) {
+                        logsIgnoradosCount = 0;
+                    }
+                    
+                    const isScrolledToBottom = term.scrollHeight - term.clientHeight <= term.scrollTop + 50;
+                    
+                    term.innerHTML = '';
+                    const logsParaRenderizar = status.logs.slice(logsIgnoradosCount);
+                    
+                    if (logsParaRenderizar.length === 0) {
+                        term.innerHTML = '<div class="terminal-line system">Terminal limpo. Aguardando novos logs...</div>';
+                    } else {
+                        logsParaRenderizar.forEach(line => {
+                            const div = document.createElement('div');
+                            div.className = 'terminal-line';
+                            
+                            // Formatar níveis de log por cores
+                            if (line.includes('[SUCCESS]')) div.classList.add('success');
+                            else if (line.includes('[ERROR]')) div.classList.add('error');
+                            else if (line.includes('[WARNING]')) div.classList.add('warning');
+                            else if (line.includes('[SYSTEM]')) div.classList.add('system');
+                            else if (line.includes('[ACTION]')) div.classList.add('action');
+                            else if (line.includes('[SUMMARY]')) div.classList.add('summary');
+                            else div.classList.add('info');
+
+                            div.innerText = line;
+                            term.appendChild(div);
+                        });
+                    }
+
+                    // Rolagem automática
+                    if (isScrolledToBottom) {
+                        term.scrollTop = term.scrollHeight;
+                    }
+                } else {
+                    ultimoTamanhoLogs = 0;
+                    logsIgnoradosCount = 0;
+                }
+            } catch (err) {
+                console.error("Erro ao verificar status do robô:", err);
+            }
+        }
+
+        async function iniciarAutomacao(forcarLogin = false) {
+            try {
+                showToast("Iniciando rotina de automação no servidor...", "warning");
+                const response = await fetch('/api/executar/iniciar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ forcar_login: forcarLogin })
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                    obterStatusRobo();
+                } else {
+                    showToast(res.message, "error");
+                }
+            } catch (err) {
+                showToast("Falha de rede ao tentar iniciar a automação.", "error");
+            }
+        }
+
+        async function pararAutomacao() {
+            if (!confirm("Tem certeza que deseja interromper a execução do robô? O processo em andamento será encerrado imediatamente.")) return;
+            try {
+                showToast("Enviando comando de interrupção...", "warning");
+                const response = await fetch('/api/executar/parar', { method: 'POST' });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                    obterStatusRobo();
+                } else {
+                    showToast(res.message, "error");
+                }
+            } catch (err) {
+                showToast("Falha de rede ao tentar interromper a automação.", "error");
+            }
+        }
+
+        function limparTerminalGrafico() {
+            logsIgnoradosCount = ultimoTamanhoLogs;
+            document.getElementById('terminal-screen').innerHTML = '<div class="terminal-line system">Terminal limpo. Aguardando novos logs...</div>';
+        }
+
+        /* --- CLIENTS LOGIC --- */
+        async function carregarClientes() {
+            try {
+                const response = await fetch('/api/clientes');
+                if (!response.ok) return;
+                listaClientesCache = await response.json();
+                renderizarTabelaClientes(listaClientesCache);
+            } catch (err) {
+                showToast("Erro ao buscar lista de clientes.", "error");
+            }
+        }
+
+        function renderizarTabelaClientes(clientes) {
+            const tbody = document.getElementById('tbl-clientes-corpo');
+            if (clientes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 30px;">Nenhum cliente cadastrado no momento.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            clientes.forEach(c => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="font-family: 'JetBrains Mono', monospace; font-weight: 500;">${formatCnpj(c.cnpj)}</td>
+                    <td>${c.nome}</td>
+                    <td style="text-align: center;">
+                        <label class="switch">
+                            <input type="checkbox" ${c.ativo ? 'checked' : ''} onchange="alterarAtividadeCliente('${c.cnpj}', this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </td>
+                    <td style="text-align: right;">
+                        <div class="action-btns" style="justify-content: flex-end;">
+                            <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 0.75rem;" onclick="abrirModalCliente('${c.cnpj}', '${c.nome}', ${c.ativo})">Editar</button>
+                            <button class="btn btn-danger" style="padding: 6px 10px; font-size: 0.75rem; background-color: var(--danger);" onclick="excluirCliente('${c.cnpj}')">Excluir</button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filtrarClientes() {
+            const query = document.getElementById('search-clientes').value.toLowerCase().trim();
+            if (!query) {
+                renderizarTabelaClientes(listaClientesCache);
+                return;
+            }
+            const filtrados = listaClientesCache.filter(c => 
+                c.cnpj.includes(query) || c.nome.toLowerCase().includes(query)
+            );
+            renderizarTabelaClientes(filtrados);
+        }
+
+        async function alterarAtividadeCliente(cnpj, ativo) {
+            try {
+                const response = await fetch(`/api/clientes/${cnpj}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ativo: ativo })
+                });
+                if (response.ok) {
+                    // Atualiza localmente no cache para não perder o foco
+                    const idx = listaClientesCache.findIndex(c => c.cnpj === cnpj);
+                    if (idx !== -1) listaClientesCache[idx].ativo = ativo;
+                    showToast(`Status do cliente atualizado com sucesso!`, "success");
+                } else {
+                    showToast("Falha ao salvar status do cliente.", "error");
+                    carregarClientes(); // Recarrega
+                }
+            } catch (err) {
+                showToast("Erro ao processar alteração de atividade.", "error");
+                carregarClientes();
+            }
+        }
+
+        async function excluirCliente(cnpj) {
+            if (!confirm(`Deseja realmente excluir permanentemente o cliente com CNPJ ${formatCnpj(cnpj)} da base?`)) return;
+            try {
+                const response = await fetch(`/api/clientes/${cnpj}`, { method: 'DELETE' });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                    carregarClientes();
+                } else {
+                    showToast(res.message, "error");
+                }
+            } catch (err) {
+                showToast("Erro ao excluir cliente.", "error");
+            }
+        }
+
+        // Modal de cliente (Adicionar / Editar)
+        let editandoCnpj = null;
+
+        function abrirModalCliente(cnpj = null, nome = '', ativo = true) {
+            editandoCnpj = cnpj;
+            const modal = document.getElementById('modal-cliente');
+            const titulo = document.getElementById('modal-cliente-titulo');
+            const inputCnpj = document.getElementById('modal-input-cnpj');
+            const inputNome = document.getElementById('modal-input-nome');
+            const inputAtivo = document.getElementById('modal-input-ativo');
+
+            if (cnpj) {
+                titulo.innerText = "Editar Cliente";
+                inputCnpj.value = cnpj;
+                inputCnpj.disabled = true; // Não deixa editar o CNPJ na edição
+                inputNome.value = nome;
+                inputAtivo.checked = ativo;
+            } else {
+                titulo.innerText = "Adicionar Novo Cliente";
+                inputCnpj.value = '';
+                inputCnpj.disabled = false;
+                inputNome.value = '';
+                inputAtivo.checked = true;
+            }
+            modal.style.display = 'flex';
+        }
+
+        function fecharModalCliente() {
+            document.getElementById('modal-cliente').style.display = 'none';
+        }
+
+        async function salvarModalCliente() {
+            const cnpj = document.getElementById('modal-input-cnpj').value.trim();
+            const nome = document.getElementById('modal-input-nome').value.trim();
+            const ativo = document.getElementById('modal-input-ativo').checked;
+
+            if (!cnpj || cnpj.length !== 14 || isNaN(cnpj)) {
+                alert("O CNPJ deve conter exatamente 14 dígitos numéricos.");
+                return;
+            }
+            if (!nome) {
+                alert("O nome ou razão social é obrigatório.");
+                return;
+            }
+
+            try {
+                let response;
+                if (editandoCnpj) {
+                    // Editar
+                    response = await fetch(`/api/clientes/${editandoCnpj}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nome: nome, ativo: ativo })
+                    });
+                } else {
+                    // Adicionar
+                    response = await fetch('/api/clientes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ cnpj: cnpj, nome: nome, ativo: ativo })
+                    });
+                }
+
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                    fecharModalCliente();
+                    carregarClientes();
+                } else {
+                    alert(res.message);
+                }
+            } catch (err) {
+                showToast("Erro ao salvar cadastro do cliente.", "error");
+            }
+        }
+
+        // Importação de Clientes via PDF
+        async function importarClientesPdf(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            showToast("Fazendo upload e processando PDF de férias...", "warning");
+            try {
+                const response = await fetch('/api/clientes/importar-pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                    carregarClientes();
+                } else {
+                    showToast(res.message, "error");
+                }
+            } catch (err) {
+                showToast("Falha na importação do arquivo PDF.", "error");
+            }
+            // Limpa o valor para permitir re-upload do mesmo arquivo
+            event.target.value = '';
+        }
+
+        /* --- REPORTS / DOWNLOADS LOGIC --- */
+        async function carregarRelatorios() {
+            try {
+                const response = await fetch('/api/relatorios');
+                if (!response.ok) return;
+                listaRelatoriosCache = await response.json();
+                renderizarTabelaRelatorios(listaRelatoriosCache);
+            } catch (err) {
+                showToast("Erro ao carregar arquivos de relatórios.", "error");
+            }
+        }
+
+        function renderizarTabelaRelatorios(arquivos) {
+            const tbody = document.getElementById('tbl-relatorios-corpo');
+            if (arquivos.length <= 1 && arquivos[0] && arquivos[0].caminho_tipo === 'desktop') {
+                // Se só tem o consolidado
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">Nenhum relatório individual gerado nas subpastas ainda.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            
+            // Filtrar apenas relatórios individuais para a tabela
+            const individuais = arquivos.filter(x => x.caminho !== "desktop/Painel_Consolidado_Pendencias_eCAC.xlsx");
+            
+            if (individuais.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">Nenhum arquivo individual gerado.</td></tr>';
+                return;
+            }
+
+            individuais.forEach(arq => {
+                const tr = document.createElement('tr');
+                
+                // Tipo badge
+                let badgeClass = 'badge-success';
+                let docType = 'PDF';
+                if (arq.nome.includes('erro_')) { badgeClass = 'badge-danger'; docType = 'ERRO'; }
+                else if (arq.nome.toLowerCase().includes('cnd')) { badgeClass = 'badge-success'; docType = 'CND'; }
+                else if (arq.nome.toLowerCase().includes('pendencias')) { badgeClass = 'badge-warning'; docType = 'REL'; }
+
+                tr.innerHTML = `
+                    <td>
+                        <span class="badge ${badgeClass}" style="margin-right: 8px;">${docType}</span>
+                        ${arq.nome}
+                    </td>
+                    <td style="font-weight: 500;">${arq.empresa}</td>
+                    <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">${arq.data_pasta}</td>
+                    <td>${arq.data_mod}</td>
+                    <td>${arq.tamanho}</td>
+                    <td style="text-align: right;">
+                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.8rem;" onclick="baixarArquivo('${arq.caminho}')">Baixar</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filtrarRelatorios() {
+            const query = document.getElementById('search-relatorios').value.toLowerCase().trim();
+            if (!query) {
+                renderizarTabelaRelatorios(listaRelatoriosCache);
+                return;
+            }
+            const filtrados = listaRelatoriosCache.filter(arq => 
+                arq.nome.toLowerCase().includes(query) || 
+                arq.empresa.toLowerCase().includes(query) ||
+                arq.data_pasta.includes(query)
+            );
+            renderizarTabelaRelatorios(filtrados);
+        }
+
+        function baixarArquivo(caminhoCompleto) {
+            window.open(`/api/relatorios/download/${caminhoCompleto}`, '_blank');
+        }
+
+        /* --- CONFIGURATIONS LOGIC --- */
+        async function carregarConfig() {
+            try {
+                const response = await fetch('/api/config');
+                if (!response.ok) return;
+                const config = await response.json();
+                
+                document.getElementById('cfg-cert').value = config.cert_first_char || 'J';
+                document.getElementById('cfg-headless').checked = config.headless;
+                document.getElementById('cfg-timeout').value = (config.timeout_ms || 30000) / 1000;
+                
+                document.getElementById('cfg-wa-enabled').checked = config.whatsapp_enabled;
+                document.getElementById('cfg-wa-number').value = config.whatsapp_number || '';
+                document.getElementById('cfg-wa-instance').value = config.whatsapp_zapi_instance || '';
+                document.getElementById('cfg-wa-token').value = config.whatsapp_zapi_token || '';
+                document.getElementById('cfg-wa-client-token').value = config.whatsapp_zapi_client_token || '';
+                
+                toggleWaFields(config.whatsapp_enabled);
+            } catch (err) {
+                showToast("Erro ao buscar configurações.", "error");
+            }
+        }
+
+        function toggleWaFields(enabled) {
+            document.querySelectorAll('.wa-field').forEach(input => {
+                input.disabled = !enabled;
+            });
+        }
+
+        async function salvarConfig(event) {
+            event.preventDefault();
+            
+            const cert = document.getElementById('cfg-cert').value.trim();
+            const headless = document.getElementById('cfg-headless').checked;
+            const timeoutSec = document.getElementById('cfg-timeout').value;
+            
+            const waEnabled = document.getElementById('cfg-wa-enabled').checked;
+            const waNumber = document.getElementById('cfg-wa-number').value.trim();
+            const waInstance = document.getElementById('cfg-wa-instance').value.trim();
+            const waToken = document.getElementById('cfg-wa-token').value.trim();
+            const waClientToken = document.getElementById('cfg-wa-client-token').value.trim();
+
+            const config = {
+                cert_first_char: cert,
+                headless: headless,
+                timeout_ms: timeoutSec * 1000,
+                whatsapp_enabled: waEnabled,
+                whatsapp_number: waNumber,
+                whatsapp_zapi_instance: waInstance,
+                whatsapp_zapi_token: waToken,
+                whatsapp_zapi_client_token: waClientToken
+            };
+
+            showToast("Salvando configurações no servidor...", "warning");
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                    carregarConfig();
+                } else {
+                    showToast(res.message, "error");
+                }
+            } catch (err) {
+                showToast("Erro ao salvar as configurações.", "error");
+            }
+        }
+
+        async function testarConexaoWhatsapp() {
+            const waNumber = document.getElementById('cfg-wa-number').value.trim();
+            const waInstance = document.getElementById('cfg-wa-instance').value.trim();
+            const waToken = document.getElementById('cfg-wa-token').value.trim();
+            const waClientToken = document.getElementById('cfg-wa-client-token').value.trim();
+
+            if (!waNumber || !waInstance || !waToken) {
+                alert("Preencha o Número do Responsável, Instância Z-API e Token Z-API para realizar o teste.");
+                return;
+            }
+
+            showToast("Enviando disparo de teste para o WhatsApp...", "warning");
+            try {
+                const response = await fetch('/api/config/testar-whatsapp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        whatsapp_number: waNumber,
+                        whatsapp_zapi_instance: waInstance,
+                        whatsapp_zapi_token: waToken,
+                        whatsapp_zapi_client_token: waClientToken
+                    })
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                } else {
+                    showToast(res.message, "error");
+                    alert(res.message);
+                }
+            } catch (err) {
+                showToast("Falha de rede ao disparar teste do WhatsApp.", "error");
+            }
+        }
+
+        /* --- AUXILIARY HELPERS --- */
+        function formatCnpj(cnpj) {
+            if (!cnpj || cnpj.length !== 14) return cnpj;
+            return cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+        }
+    </script>
+</body>
+</html>

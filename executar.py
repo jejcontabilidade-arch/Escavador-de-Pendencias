@@ -37,9 +37,209 @@ def press_enter(first_char=None):
     log("Enviando comando ENTER para o Windows...", "SYSTEM")
     VK_RETURN = 0x0D
     ctypes.windll.user32.keybd_event(VK_RETURN, 0, 0, 0) # Key Down
-    time.sleep(0.05)
     ctypes.windll.user32.keybd_event(VK_RETURN, 0, 2, 0) # Key Up
     log("ENTER enviado.", "SYSTEM")
+
+# Função auxiliar para fechar modais jQuery UI e Caixa Postal que cobrem a tela
+def fechar_modais_e_overlays(page):
+    try:
+        # 1. Tentar fechar pelo botão (X) do dialog jQuery UI
+        btn_close = page.locator(".ui-dialog-titlebar-close, button:has-text('Close'), button[title='Close']").first
+        if btn_close.is_visible():
+            log("[MODAL-CLEANUP] Botão de fechar (X) detectado. Clicando...", "INFO")
+            btn_close.click(timeout=1500)
+            time.sleep(0.5)
+    except Exception:
+        pass
+
+    try:
+        # 2. Enviar a tecla ESCAPE para fechar diálogos ativos
+        page.keyboard.press("Escape")
+    except Exception:
+        pass
+
+    try:
+        # 3. Remover fisicamente qualquer overlay/dialog do DOM para garantir 100% de passagem e evitar cliques interceptados
+        overlays = page.locator(".ui-widget-overlay, .ui-dialog, .ui-widget-shadow")
+        if overlays.first.is_visible():
+            log("[MODAL-CLEANUP] Removendo modais/overlays remanescentes do DOM...", "WARNING")
+            page.evaluate("""
+                document.querySelectorAll('.ui-widget-overlay, .ui-dialog, .ui-widget-shadow, .ui-dialog-buttonpane').forEach(el => {
+                    el.style.display = 'none';
+                    el.remove();
+                });
+            """)
+            time.sleep(0.3)
+    except Exception as e:
+        log(f"[MODAL-CLEANUP] Falha ao limpar DOM via JS: {e}", "WARNING")
+
+# Função auxiliar para checar e tratar a Caixa Postal bloqueante (lendo mensagens importantes para unblock)
+def checar_e_tratar_caixa_postal(page, client_dir, config):
+    try:
+        # Detectar se o modal de aviso bloqueante está presente
+        btn_caixa = None
+        for selector in [
+            "button:has-text('Ir para a Caixa Postal')",
+            "input[value='Ir para a Caixa Postal']",
+            "text=Ir para a Caixa Postal"
+        ]:
+            try:
+                loc = page.locator(selector).first
+                if loc.is_visible(timeout=1000):
+                    btn_caixa = loc
+                    break
+            except Exception:
+                continue
+        
+        if btn_caixa:
+            log("[ALERTA CRÍTICO] Caixa Postal bloqueante detectada! O e-CAC exige a leitura de mensagens importantes para unblock.", "WARNING")
+            
+            # Clicar em "Ir para a Caixa Postal"
+            btn_caixa.click()
+            page.wait_for_load_state("load")
+            page.wait_for_timeout(2000)
+            
+            # Buscar e abrir a mensagem com indicativo de alerta (!) ou não lida
+            mensagem_aberta = False
+            for sel in [
+                "tr:has-text('!') a",
+                "tr.nao-lida a",
+                "td.assunto a",
+                "a:has-text('ALERTA')",
+                "a:has-text('risco')",
+                "a[href*='Mensagem']",
+                "//tr[contains(., '!')]//a"
+            ]:
+                try:
+                    loc = page.locator(sel).first
+                    if loc.is_visible(timeout=2000):
+                        log(f"[CAIXA-POSTAL] Abrindo mensagem importante: '{loc.inner_text().strip()}'", "ACTION")
+                        loc.click()
+                        mensagem_aberta = True
+                        break
+                except Exception:
+                    continue
+            
+            if mensagem_aberta:
+                page.wait_for_timeout(2000)
+                
+                # Extrair assunto e conteúdo da mensagem
+                assunto = ""
+                conteudo = ""
+                try:
+                    assunto = page.locator("h1, h2, .titulo-mensagem, td.assunto").first.inner_text().strip()
+                except Exception:
+                    assunto = "Alerta Importante e-CAC"
+                    
+                try:
+                    conteudo = page.locator("body").inner_text().strip()
+                except Exception:
+                    conteudo = "Não foi possível extrair o corpo completo da mensagem."
+                
+                log(f"[CAIXA-POSTAL] Alerta de Caixa Postal extraído: '{assunto[:60]}...'", "SUCCESS")
+                
+                # Gravar arquivo de alerta TXT e JSON para estruturação fácil no Excel
+                alerta_path = os.path.join(client_dir, "ALERTA_CAIXA_POSTAL.txt")
+                with open(alerta_path, "w", encoding="utf-8") as f:
+                    f.write("============================================================\n")
+                    f.write(" MENSAGEM IMPORTANTE / ALERTA DE EXCLUSÃO CAPTURADO NO e-CAC\n")
+                    f.write("============================================================\n")
+                    f.write(f"Data Captura : {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
+                    f.write(f"Assunto      : {assunto}\n")
+                    f.write(f"Conteúdo     :\n\n{conteudo}\n")
+                
+                alerta_json_path = os.path.join(client_dir, "ALERTA_CAIXA_POSTAL.json")
+                with open(alerta_json_path, "w", encoding="utf-8") as f:
+                    json.dump({
+                        "assunto": assunto,
+                        "conteudo": conteudo,
+                        "data_captura": datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+                    }, f, indent=4, ensure_ascii=False)
+                
+                log(f"[CAIXA-POSTAL] Alerta salvo com sucesso em TXT e JSON: {client_dir}", "SUCCESS")
+                
+                # Retornar para a Home do e-CAC para resetar e continuar o fluxo sem o modal bloqueante!
+                log("[CAIXA-POSTAL] Retornando para a página inicial do e-CAC para prosseguir...", "ACTION")
+                page.goto(config["portal_url"])
+                page.wait_for_selector("text=Alterar perfil de acesso", timeout=10000)
+                
+            else:
+                log("[CAIXA-POSTAL] Caixa Postal aberta, mas não foi possível localizar a mensagem unread correspondente.", "WARNING")
+                
+    except Exception as e:
+        log(f"Aviso ao tentar tratar Caixa Postal bloqueante: {e}. Prosseguindo com o fluxo...", "WARNING")
+
+# Função auxiliar para garantir que a sessão com o e-CAC está ativa e realizar login se necessário
+def verificar_e_reestabelecer_sessao(page, config):
+    log("Verificando se a sessão com o e-CAC está ativa...", "INFO")
+    try:
+        # Acessa a URL principal
+        page.goto(config["portal_url"])
+        fechar_modais_e_overlays(page)
+        
+        # Tenta esperar pelo elemento do painel autenticado
+        page.wait_for_selector("text=Alterar perfil de acesso", timeout=8000)
+        log("Sessão e-CAC validada e ativa.", "SUCCESS")
+        return True
+    except Exception:
+        log("Sessão expirada ou deslogada. Tentando reestabelecer login automaticamente...", "WARNING")
+        
+        try:
+            # Se não estiver no e-CAC, vai para a página inicial
+            if "cav.receita.fazenda.gov.br" not in page.url:
+                page.goto("https://cav.receita.fazenda.gov.br/ecac/")
+            
+            # Se o botão de login do Gov.br estiver visível, clica nele
+            btn_gov = page.locator('input[alt="Acesso Gov BR"]').first
+            if btn_gov.is_visible(timeout=5000):
+                log("Botão 'Acesso Gov BR' detectado. Clicando...", "ACTION")
+                btn_gov.click()
+                page.wait_for_timeout(2000)
+                
+            # Aguarda o botão do certificado
+            page.wait_for_selector('button#login-certificate, #login-certificate', timeout=15000)
+            
+            # Dispara a thread para dar ENTER
+            import threading
+            def auto_confirm_dialog():
+                time.sleep(3.5)
+                log("[AUTO-LOGIN-RETRY] Janela de seleção do Windows deve estar aberta. Simulando ENTER...", "SYSTEM")
+                press_enter()
+                time.sleep(1.2)
+                press_enter()
+                
+            threading.Thread(target=auto_confirm_dialog, daemon=True).start()
+            
+            log("Clicando no botão 'Seu certificado digital'...", "ACTION")
+            page.click('button#login-certificate')
+            
+            # Aguarda o painel
+            page.wait_for_selector("text=Alterar perfil de acesso", timeout=45000)
+            log("Login restabelecido com sucesso na sessão ativa!", "SUCCESS")
+            
+            # Salvar o estado da sessão atualizado em state.json
+            try:
+                page.context.storage_state(path="state.json")
+                log("Sessão salva com sucesso em 'state.json'.", "SUCCESS")
+            except Exception as e:
+                log(f"Erro ao salvar estado da sessão: {e}", "WARNING")
+                
+            return True
+        except Exception as e:
+            log(f"Falha ao tentar reestabelecer login automaticamente: {e}. Solicitando intervenção manual se necessário...", "ERROR")
+            if not config["headless"]:
+                log("Aguardando login manual na tela (limite de 120 segundos)...", "IMPORTANT")
+                try:
+                    page.wait_for_selector("text=Alterar perfil de acesso", timeout=120000)
+                    log("Login manual detectado com sucesso!", "SUCCESS")
+                    try:
+                        page.context.storage_state(path="state.json")
+                    except Exception:
+                        pass
+                    return True
+                except Exception:
+                    pass
+            return False
 
 # Carregar arquivo de configuração
 def load_config():
@@ -117,9 +317,10 @@ def load_clients(filepath):
 # Salvar status do processamento do cliente
 def save_client_status(relatorios_dir, cnpj, nome, status, details=""):
     today = datetime.date.today().strftime("%Y-%m-%d")
+    month = datetime.date.today().strftime("%Y-%m")
     # Limpar nome para criar pasta segura, mantendo letras acentuadas, cedilhas e espaços
     nome_limpo = "".join(c if c.isalnum() or c in " _-ÇçÁáÉéÍíÓóÚúÃãÕõÂâÊêÔôÀàÜü" else "_" for c in nome).strip()
-    client_dir = os.path.join(relatorios_dir, nome_limpo, today)
+    client_dir = os.path.join(relatorios_dir, nome_limpo, month)
     os.makedirs(client_dir, exist_ok=True)
     
     status_data = {
@@ -149,7 +350,11 @@ def clean_filename(name):
 def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
     log(f"Iniciando a geração do Painel Excel Consolidado: {output_path}", "INFO")
     try:
+        import openpyxl
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+        
         today_str = datetime.date.today().strftime("%Y-%m-%d")
+        month_str = datetime.date.today().strftime("%Y-%m")
         rows_data = []
         
         for c in clientes:
@@ -169,7 +374,7 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
                 continue
                 
             nome_limpo = clean_filename(nome_raw)
-            status_path = os.path.join(relatorios_dir, nome_limpo, today_str, "status.json")
+            status_path = os.path.join(relatorios_dir, nome_limpo, month_str, "status.json")
             
             status = "Pendente"
             detalhes = "Não Consultado"
@@ -198,12 +403,31 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
                 except Exception as e:
                     observacao = f"Erro ao ler status: {e}"
                     
+            # Verifica se há alertas de Caixa Postal capturados para este cliente
+            alerta_file = os.path.join(relatorios_dir, nome_limpo, month_str, "ALERTA_CAIXA_POSTAL.txt")
+            alerta_json = os.path.join(relatorios_dir, nome_limpo, month_str, "ALERTA_CAIXA_POSTAL.json")
+            alerta_texto = "-"
+            
+            if os.path.exists(alerta_json):
+                try:
+                    with open(alerta_json, "r", encoding="utf-8") as f_json:
+                        alerta_data = json.load(f_json)
+                        alerta_texto = f"ASSUNTO: {alerta_data.get('assunto')}\n\nMENSAGEM:\n{alerta_data.get('conteudo')}"
+                except Exception:
+                    alerta_texto = "Erro ao carregar mensagem."
+            elif os.path.exists(alerta_file):
+                alerta_texto = "Alerta capturado (Veja o arquivo ALERTA_CAIXA_POSTAL.txt)"
+                
+            if os.path.exists(alerta_file):
+                observacao = f"[ATENÇÃO] Alerta de Caixa Postal capturado! | {observacao}"
+                
             rows_data.append({
                 "cnpj": format_cnpj(cnpj_raw),
                 "nome": nome_raw,
                 "status": status,
                 "detalhes": detalhes,
                 "data_hora": data_hora,
+                "alerta_caixa_postal": alerta_texto,
                 "observacao": observacao
             })
             
@@ -239,25 +463,30 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
         thin_border_side = Side(border_style="thin", color="D3D3D3")
         data_border = Border(left=thin_border_side, right=thin_border_side, top=thin_border_side, bottom=thin_border_side)
         
-        # Merge columns for titles
-        ws.merge_cells("A1:F1")
+        # Helper function to apply styles to merged cell ranges
+        def style_range(ws, cell_range, font=None, fill=None, alignment=None, border=None):
+            for row in ws[cell_range]:
+                for cell in row:
+                    if font is not None: cell.font = font
+                    if fill is not None: cell.fill = fill
+                    if alignment is not None: cell.alignment = alignment
+                    if border is not None: cell.border = border
+ 
+        # Merge columns for titles and style them perfectly without cutouts (7 columns now!)
+        ws.merge_cells("A1:G1")
         ws["A1"] = "J&J CONTABILIDADE — PAINEL DE CONTROLE DE PENDÊNCIAS FISCAIS (e-CAC)"
-        ws["A1"].font = white_font_16
-        ws["A1"].fill = navy_fill
-        ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+        style_range(ws, "A1:G1", font=white_font_16, fill=navy_fill, alignment=Alignment(horizontal="center", vertical="center"))
         ws.row_dimensions[1].height = 40
         
-        ws.merge_cells("A2:F2")
+        ws.merge_cells("A2:G2")
         ws["A2"] = "Varredura de Débitos Federais e Situação Fiscal via Procuração Digital"
-        ws["A2"].font = gray_font_11
-        ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
+        style_range(ws, "A2:G2", font=gray_font_11, alignment=Alignment(horizontal="center", vertical="center"))
         ws.row_dimensions[2].height = 22
         
-        ws.merge_cells("A3:F3")
+        ws.merge_cells("A3:G3")
         hoje_fmt = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
         ws["A3"] = f"Relatório emitido em {hoje_fmt} | Escavador de Pendências Automatizado v1.0"
-        ws["A3"].font = gray_font_10
-        ws["A3"].alignment = Alignment(horizontal="center", vertical="center")
+        style_range(ws, "A3:G3", font=gray_font_10, alignment=Alignment(horizontal="center", vertical="center"))
         ws.row_dimensions[3].height = 20
         
         ws.row_dimensions[4].height = 15
@@ -268,6 +497,7 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
             "Status da Consulta",
             "Resultado / Documento",
             "Data/Hora Varredura",
+            "Alerta Caixa Postal (e-CAC)",
             "Observações / Detalhes do Processamento"
         ]
         
@@ -275,7 +505,7 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
             cell = ws.cell(row=5, column=col_idx, value=h)
             cell.font = header_font
             cell.fill = header_fill
-            cell.alignment = Alignment(horizontal="center" if col_idx != 2 and col_idx != 6 else "left", vertical="center", wrap_text=True)
+            cell.alignment = Alignment(horizontal="center" if col_idx not in [2, 6, 7] else "left", vertical="center", wrap_text=True)
             cell.border = data_border
             
         ws.row_dimensions[5].height = 28
@@ -292,11 +522,17 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
             detalhe_cell.alignment = Alignment(horizontal="center", vertical="center")
             
             ws.cell(row=current_row, column=5, value=r["data_hora"]).alignment = Alignment(horizontal="center", vertical="center")
-            ws.cell(row=current_row, column=6, value=r["observacao"]).alignment = Alignment(horizontal="left", vertical="center")
+            
+            # Coluna 6: Texto completo do Alerta da Caixa Postal
+            alerta_cell = ws.cell(row=current_row, column=6, value=r["alerta_caixa_postal"])
+            alerta_cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            
+            # Coluna 7: Observações e Detalhes
+            ws.cell(row=current_row, column=7, value=r["observacao"]).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
             
             row_fill = zebra_fill if idx % 2 == 1 else white_fill
             
-            for col_idx in range(1, 7):
+            for col_idx in range(1, 8):
                 cell = ws.cell(row=current_row, column=col_idx)
                 cell.border = data_border
                 cell.fill = row_fill
@@ -340,17 +576,38 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
         ws.cell(row=totais_row, column=3, value=f'=COUNTIF(C6:C{totais_row-2}, "Sucesso")').alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=totais_row, column=4, value=f'=COUNTIF(D6:D{totais_row-2}, "*Certidão*") + COUNTIF(D6:D{totais_row-2}, "*Sem Pendências*")').alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=totais_row, column=5, value=f'=COUNTIF(D6:D{totais_row-2}, "*Relatório*")').alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=totais_row, column=6, value=f'=COUNTIF(C6:C{totais_row-2}, "Erro")').alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=totais_row, column=6, value="").alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=totais_row, column=7, value=f'=COUNTIF(C6:C{totais_row-2}, "Erro")').alignment = Alignment(horizontal="left", vertical="center")
         
-        for col_idx in range(1, 7):
+        # Professional borders for accounting totals (Double bottom line)
+        double_bottom = Side(border_style="double", color="FFFFFF")
+        thin_top = Side(border_style="thin", color="FFFFFF")
+        thin_side = Side(border_style="thin", color="D3D3D3")
+        totals_border = Border(left=thin_side, right=thin_side, top=thin_top, bottom=double_bottom)
+        
+        for col_idx in range(1, 8):
             cell = ws.cell(row=totais_row, column=col_idx)
             cell.font = header_font
             cell.fill = header_fill
-            cell.border = data_border
+            cell.border = totals_border
+            if col_idx == 1:
+                cell.alignment = Alignment(horizontal="right", vertical="center")
+            elif col_idx in [3, 4, 5]:
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            else:
+                cell.alignment = Alignment(horizontal="left", vertical="center")
             
         ws.row_dimensions[totais_row].height = 26
         
-        col_widths = {"A": 22, "B": 48, "C": 20, "D": 38, "E": 22, "F": 55}
+        col_widths = {
+            "A": 22, 
+            "B": 48, 
+            "C": 20, 
+            "D": 38, 
+            "E": 22, 
+            "F": 65, # Coluna larga para o texto da Caixa Postal
+            "G": 55  # Observações
+        }
         for col_letter, width in col_widths.items():
             ws.column_dimensions[col_letter].width = width
             
@@ -362,42 +619,52 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
 def alterar_perfil(page, cnpj, procurador_cnpj):
     log(f"Alterando perfil de acesso para o CNPJ: {cnpj}...", "ACTION")
     
+    # 0. Limpar modais de aviso/mensagem (como aviso de caixa postal)
+    fechar_modais_e_overlays(page)
+
     # 1. Clicar no botão "Alterar perfil de acesso"
     alterar_perfil_btn = None
     for selector in ["text=Alterar perfil de acesso", "#alterarPerfil", "a:has-text('Alterar perfil')", ".btn-alterar-perfil"]:
         try:
-            loc = page.locator(selector)
-            if loc.first.is_visible(timeout=3000):
-                alterar_perfil_btn = loc.first
-                break
+            loc = page.locator(selector).first
+            loc.wait_for(state="visible", timeout=3000)
+            alterar_perfil_btn = loc
+            break
         except Exception:
             continue
             
     if not alterar_perfil_btn:
         raise Exception("Não foi possível localizar o botão 'Alterar perfil de acesso' no cabeçalho.")
         
-    alterar_perfil_btn.first.click()
-    
-    # Aguarda o modal de alteração de perfil estar 100% visível na tela (evita qualquer Race Condition!)
-    log("Aguardando exibição do modal de alteração de perfil...", "ACTION")
     try:
-        # Procuramos por múltiplos seletores individuais para o modal
-        modal_carregado = False
-        for sel in ["text=Procurador de pessoa jurídica", "text=Procurador de Pessoa Jurídica", "text=Titular"]:
-            try:
-                if page.locator(sel).first.is_visible(timeout=2000):
-                    modal_carregado = True
-                    break
-            except Exception:
-                continue
-    except Exception:
+        alterar_perfil_btn.click(timeout=5000)
+    except Exception as click_err:
+        log(f"Erro ao clicar no botão de perfil: {click_err}. Tentando limpar overlays de recuperação...", "WARNING")
+        fechar_modais_e_overlays(page)
+        # Tenta localizar e clicar novamente
+        alterar_perfil_btn = page.locator("text=Alterar perfil de acesso").first
+        alterar_perfil_btn.click(timeout=5000)
+    
+    # Aguarda o modal de alteração de perfil estar 100% visível na tela
+    log("Aguardando exibição do modal de alteração de perfil...", "ACTION")
+    modal_carregado = False
+    for sel in ["text=Procurador de pessoa jurídica", "text=Procurador de Pessoa Jurídica", "text=Titular"]:
+        try:
+            loc = page.locator(sel).first
+            loc.wait_for(state="visible", timeout=4000)
+            modal_carregado = True
+            log(f"Modal carregado com sucesso (elemento '{sel}' visível)", "SUCCESS")
+            break
+        except Exception:
+            continue
+            
+    if not modal_carregado:
         log("Aviso: Tempo limite excedido ao aguardar visibilidade do modal. Tentando prosseguir diretamente.", "WARNING")
         
     # Se o CNPJ de destino for o próprio procurador, mudamos para o perfil Titular usando o botão dedicado
     if procurador_cnpj and cnpj == procurador_cnpj:
         log("Mudando de volta para o perfil Titular...", "ACTION")
         try:
-            # Localizar e clicar no botão de Titular tentando seletores isolados sequentially
             btn_titular = None
             for selector in [
                 "input[value='Titular']",
@@ -409,7 +676,7 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
             ]:
                 try:
                     loc = page.locator(selector).first
-                    if loc.is_visible(timeout=2000):
+                    if loc.is_visible():
                         btn_titular = loc
                         break
                 except Exception:
@@ -420,7 +687,6 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
                 
             btn_titular.click(timeout=5000)
             log("Botão 'Titular' clicado com sucesso para retornar ao perfil original.", "SUCCESS")
-            # Aguarda transição do perfil voltar a carregar
             page.wait_for_timeout(2000)
             return
         except Exception as e:
@@ -441,17 +707,19 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
             inp = page.locator(inp_xpath).first
             btn = page.locator(btn_xpath).first
             
-            if inp.is_visible(timeout=2000) and btn.is_visible(timeout=2000):
-                input_cnpj = inp
-                btn_alterar = btn
-                log(f"Campos do perfil CNPJ localizados com sucesso via XPath baseado em label: '{text_val}'", "INFO")
-                break
+            inp.wait_for(state="visible", timeout=3000)
+            btn.wait_for(state="visible", timeout=3000)
+            
+            input_cnpj = inp
+            btn_alterar = btn
+            log(f"Campos do perfil CNPJ localizados com sucesso via XPath baseado em label: '{text_val}'", "INFO")
+            break
         except Exception:
             continue
             
     # Método 2: Fallback por índice global (O segundo input e o segundo botão Alterar)
     if not input_cnpj or not btn_alterar:
-        log("Busca por label falhou. Usando fallback de índice global (segundo campo da tela)...", "WARNING")
+        log("Busca por label falhou ou campos não ficaram visíveis. Usando fallback de índice global...", "WARNING")
         try:
             inputs = page.locator("input[type='text'], input:not([type])")
             buttons = page.locator("input[value='Alterar'], input[type='submit'], button:has-text('Alterar')")
@@ -464,7 +732,7 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
             log(f"Falha ao executar fallback de índice global: {e}", "ERROR")
             
     if not input_cnpj or not btn_alterar:
-        raise Exception("Não foi possível localizar o campo de texto do CNPJ ou o botão 'Alterar' correspondente.")
+        raise Exception("Não foi possível localizar o campo de texto do CNPJ ou o botão 'Alterar' correspondente no modal.")
         
     # 3. Preencher o CNPJ no campo correto
     try:
@@ -516,7 +784,7 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
     else:
         # Se falhou e esgotou os 10 segundos, extrai o texto visível para relatar a causa exata
         page_text = page.locator("body").inner_text()
-        for palavra_chave in ["não cadastrada", "expirada", "inexistente", "erro", "restrição", "inválido", "restricao"]:
+        for palavra_chave in ["não cadastrada", "expirada", "inexistente", "erro", "restrição", "inválido", "restricao", "procuração"]:
             if palavra_chave in page_text.lower():
                 raise Exception(f"A alteração de perfil falhou. Mensagem do e-CAC: '{page_text.strip()[:180]}...'")
                 
@@ -646,7 +914,7 @@ def baixar_certidao_regularidade_fiscal(page, context, client_dir, cnpj, config)
             f.write("Status: Regular - Nenhuma pendência fiscal encontrada na Receita Federal (Emissão manual recomendada).")
         return "Sem Pendências (Informativo Gravado)"
 
-def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config):
+def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja_possui_relatorio=False):
     log("Navegando para o serviço de Consulta de Situação Fiscal...", "ACTION")
     
     # 1. Clicar na aba "Certidões e Situação Fiscal" no painel principal do e-CAC
@@ -675,19 +943,30 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config):
     new_page = None
     
     for selector in [
+        "a:has-text('Consulta Pendências - Situação Fiscal')",
         "text=Consulta Pendências - Situação Fiscal",
         "a[href*='servico/pendencias']",
         "//a[contains(text(), 'Consulta Pendências')]"
     ]:
         try:
-            # Esperar a abertura da nova aba ao clicar
-            with context.expect_page() as new_page_info:
-                page.click(selector, timeout=4000)
+            # Esperar a abertura da nova aba ao clicar (definimos timeout de 10s)
+            with context.expect_page(timeout=10000) as new_page_info:
+                # Usamos dispatch_event('click') para simular o clique a nível de evento DOM
+                # Isso evita que o cursor físico dispare o hover do tooltip que cobre o link
+                page.locator(selector).first.dispatch_event("click")
             new_page = new_page_info.value
             link_clicado = True
             break
-        except Exception:
-            continue
+        except Exception as click_err:
+            log(f"Falha ao clicar com dispatch_event no seletor '{selector}': {click_err}. Tentando clique físico...", "WARNING")
+            try:
+                with context.expect_page(timeout=10000) as new_page_info:
+                    page.locator(selector).first.click(timeout=4000)
+                new_page = new_page_info.value
+                link_clicado = True
+                break
+            except Exception:
+                continue
             
     if not link_clicado or not new_page:
         raise Exception("Não foi possível clicar em 'Consulta Pendências - Situação Fiscal' ou a nova aba não abriu.")
@@ -716,18 +995,91 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config):
     except Exception as e:
         log(f"Sem tela de login intermediária do Gov.br ou falha ao clicar: {e}. Prosseguindo...", "INFO")
         
+    # 2.7 Trocar Representação diretamente no Novo Portal (se necessário)
+    try:
+        avatar_trigger = new_page.locator("#avatar-dropdown-trigger, .br-sign-in").first
+        if avatar_trigger.is_visible(timeout=4000):
+            header_text = avatar_trigger.inner_text()
+            cnpj_limpo = "".join(filter(str.isdigit, cnpj))
+            header_cnpj_limpo = "".join(filter(str.isdigit, header_text))
+            
+            # Se o CNPJ ativo no cabeçalho do novo portal for diferente do CNPJ procurado, fazemos a troca
+            if cnpj_limpo not in header_cnpj_limpo:
+                log(f"[NOVO-PORTAL] CNPJ ativo no novo portal é diferente do alvo ({cnpj}). Iniciando troca...", "INFO")
+                
+                # Clicar com time de 2 segundos no trigger do avatar
+                avatar_trigger.click()
+                new_page.wait_for_timeout(2000)
+                
+                # Escrever o CNPJ ou CPF do cliente no input
+                log(f"[NOVO-PORTAL] Preenchendo CNPJ de representação: {cnpj}...", "ACTION")
+                cnpj_input = new_page.locator("#input-representar-cpfcnpj, input[name='representar-cpfcnpj']").first
+                cnpj_input.clear()
+                cnpj_input.fill(cnpj)
+                
+                # Aguardar 1 segundo
+                new_page.wait_for_timeout(1000)
+                
+                # Clicar no dropdown de perfil de representação
+                log("[NOVO-PORTAL] Clicando no dropdown de perfil de representação...", "ACTION")
+                select_profile = new_page.locator("ng-select, .ng-select-container, .ng-placeholder").first
+                select_profile.click()
+                new_page.wait_for_timeout(500)
+                
+                # Selecionar "PROCURADOR"
+                opcao_procurador = new_page.locator(".ng-option:has-text('PROCURADOR'), .ng-option:has-text('Procurador'), text='PROCURADOR'").first
+                opcao_procurador.click()
+                new_page.wait_for_timeout(500)
+                
+                # Clicar no botão Representar
+                log("[NOVO-PORTAL] Clicando no botão Representar...", "ACTION")
+                btn_representar = new_page.locator("button:has-text('Representar'), .btn:has-text('Representar'), [role='button']:has-text('Representar')").first
+                btn_representar.click()
+                
+                # Aguardar 2 segundos
+                new_page.wait_for_timeout(2000)
+                
+                # Clicar no centro da página (body) para conferir/remover dropdown e prosseguir
+                new_page.click("body")
+                new_page.wait_for_timeout(1000)
+                log(f"[NOVO-PORTAL] Representação alterada com sucesso para o CNPJ: {cnpj}", "SUCCESS")
+            else:
+                log(f"[NOVO-PORTAL] Representação ativa no novo portal já corresponde ao CNPJ {cnpj}.", "SUCCESS")
+    except Exception as rep_err:
+        log(f"[NOVO-PORTAL] Aviso ao gerenciar representação diretamente no novo portal: {rep_err}. Prosseguindo com o fluxo existente...", "WARNING")
+
     # 3. Aguardar o carregamento dos dados da situação fiscal
     # Esta página costuma fazer consultas lentas em APIs internas. Vamos aguardar pacientemente.
     log("Aguardando carregamento da situação fiscal do cliente na Receita Federal (isso pode levar alguns segundos)...", "ACTION")
     
-    try:
-        new_page.wait_for_selector(
-            "text=Gerar Relatório, text=Baixar Relatório, text=Baixar Certidão, text=não foram encontradas, text=regularidade, text=Sem pendência, button:has-text('Relatório')",
-            timeout=30000
-        )
+    # Espera até 10 segundos no total com polling ativo para avançar IMEDIATAMENTE quando a página carregar
+    selectors = [
+        "text=Gerar Relatório",
+        "text=Baixar Relatório",
+        "text=Baixar Certidão",
+        "text=não foram encontradas",
+        "text=regularidade",
+        "text=Sem pendência",
+        "button:has-text('Relatório')"
+    ]
+    
+    carregado = False
+    for _ in range(10): # 10 segundos no máximo
+        for sel in selectors:
+            try:
+                if new_page.locator(sel).first.is_visible():
+                    carregado = True
+                    break
+            except Exception:
+                continue
+        if carregado:
+            break
+        new_page.wait_for_timeout(1000)
+
+    if carregado:
         log("Carregamento da situação fiscal concluído!", "SUCCESS")
-    except Exception:
-        log("Aviso: Tempo limite de carregamento visual excedido. Verificando elementos presentes na página...", "WARNING")
+    else:
+        log("Aviso: Tempo limite de carregamento de 10 segundos atingido. Verificando elementos presentes na página...", "WARNING")
         
     # 4. Analisar se o cliente tem pendências ou se está regular
     page_text = new_page.locator("body").inner_text()
@@ -780,7 +1132,12 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config):
         return resultado_fallback
         
     else:
-        # COM PENDÊNCIAS - Baixar o Relatório PDF
+        # COM PENDÊNCIAS - Baixar o Relatório PDF ou ignorar se já existe no mês
+        if ja_possui_relatorio:
+            log("A situação fiscal continua com pendências e o relatório do mês corrente já existe na pasta. Ignorando novo download redundante.", "INFO")
+            new_page.close()
+            return "Relatório Existente (Pendências mantidas)"
+            
         log("Pendências fiscais ativas detectadas. Buscando botão de download do RELATÓRIO...", "ACTION")
         
         botao_relatorio = None
@@ -901,6 +1258,52 @@ def realizar_login_manual(config):
             browser.close()
             return False
 
+def enviar_whatsapp(mensagem, config):
+    if not config.get("whatsapp_enabled"):
+        log("Notificação via WhatsApp desabilitada nas configurações.", "INFO")
+        return False
+        
+    instance = config.get("whatsapp_zapi_instance")
+    token = config.get("whatsapp_zapi_token")
+    number = config.get("whatsapp_number")
+    client_token = config.get("whatsapp_zapi_client_token")
+    
+    if not instance or not token or not number:
+        log("Erro: Configurações de WhatsApp (Instância, Token ou Número) incompletas.", "ERROR")
+        return False
+        
+    # Higienizar número: apenas dígitos
+    number_clean = "".join(filter(str.isdigit, number))
+    # Garantir código do país
+    if not number_clean.startswith("55") and len(number_clean) in [10, 11]:
+        number_clean = "55" + number_clean
+        
+    url = f"https://api.z-api.io/instances/{instance}/token/{token}/send-text"
+    headers = {
+        "Content-Type": "application/json"
+    }
+    if client_token:
+        headers["Client-Token"] = client_token
+        
+    payload = {
+        "phone": number_clean,
+        "message": mensagem
+    }
+    
+    log(f"Enviando notificação WhatsApp via Z-API para {number_clean}...", "INFO")
+    try:
+        import requests
+        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        if response.status_code in [200, 201]:
+            log("Notificação WhatsApp enviada com sucesso!", "SUCCESS")
+            return True
+        else:
+            log(f"Falha ao enviar WhatsApp. Status: {response.status_code}, Resposta: {response.text}", "ERROR")
+            return False
+    except Exception as e:
+        log(f"Erro ao enviar requisição para Z-API: {e}", "ERROR")
+        return False
+
 def main():
     config = load_config()
     clientes = load_clients(config["clientes_file"])
@@ -1008,72 +1411,145 @@ def main():
                         skipped_count += 1
                         continue
                         
+                    # Verificar se o cliente já foi processado com sucesso hoje ou se já possui regularidade no mês
+                    today_str = datetime.date.today().strftime("%Y-%m-%d")
+                    month_str = datetime.date.today().strftime("%Y-%m")
+                    nome_limpo = clean_filename(nome)
+                    
+                    client_dir = os.path.join(config["relatorios_dir"], nome_limpo, month_str)
+                    status_path = os.path.join(client_dir, "status.json")
+                    
+                    forcar_todos = "--forcar-todos" in sys.argv
+                    
+                    # 1. Verificar se já existem arquivos de regularidade (Certidão ou Informativo Regular) na pasta mensal
+                    cnd_pdfs = glob.glob(os.path.join(client_dir, "CertidaoRegularidadeFiscal-*.pdf"))
+                    cnd_txts = glob.glob(os.path.join(client_dir, "Sem_Pendencias_Fiscais_Regular-*.txt"))
+                    
+                    if not forcar_todos and (cnd_pdfs or cnd_txts):
+                        log(f"Cliente {nome} ({cnpj}) já possui Certidão/Regularidade ativa na pasta do mês ({month_str}). Pulando consulta no e-CAC.", "SUCCESS")
+                        detalhes_status = "Certidão Baixada" if cnd_pdfs else "Sem Pendências (Informativo Gravado)"
+                        save_client_status(config["relatorios_dir"], cnpj, nome, "Sucesso", detalhes_status)
+                        success_count += 1
+                        continue
+                        
+                    # 2. Verificar se o cliente já foi consultado com SUCESSO hoje de fato
+                    ja_processado_hoje = False
+                    if not forcar_todos and os.path.exists(status_path):
+                        try:
+                            with open(status_path, "r", encoding="utf-8") as f:
+                                status_data = json.load(f)
+                                if status_data.get("status") == "Sucesso" and status_data.get("data_consulta") == today_str:
+                                    ja_processado_hoje = True
+                        except Exception:
+                            pass
+                            
+                    if ja_processado_hoje:
+                        log(f"Cliente {nome} ({cnpj}) já foi consultado com SUCESSO hoje. Pulando...", "SUCCESS")
+                        success_count += 1
+                        continue
+                        
+                    # 3. Verificar se já existe relatório de pendência na pasta do mês
+                    relatorio_pdfs = glob.glob(os.path.join(client_dir, "RelatorioSituacaoFiscal-*.pdf"))
+                    tem_relatorio_existente = len(relatorio_pdfs) > 0
+                    
                     log(f"Processando Cliente: {nome} ({cnpj})...", "INFO")
+                    if tem_relatorio_existente:
+                        log(f"Identificado relatório de pendências pré-existente na pasta do mês ({month_str}). Caso continue irregular, o download será pulado.", "INFO")
                     
                     # Criar diretório para salvar o relatório do cliente (já inicializa como pendente)
                     client_dir = save_client_status(config["relatorios_dir"], cnpj, nome, "Pendente", "Iniciado")
                     
-                    try:
-                        # 1. Verificar qual é o perfil atualmente ativo na tela do e-CAC
-                        # Fazemos isso de forma ultra-confiável analisando o texto do cabeçalho
-                        header_text = page.locator("body").inner_text()
-                        header_text_limpo = header_text.replace(".", "").replace("/", "").replace("-", "").replace(" ", "").replace("\n", "").replace("\r", "")
-                        
-                        cnpj_sem_formatacao = cnpj.replace(".", "").replace("/", "").replace("-", "")
-                        
-                        # Caso A: O cliente que queremos consultar é o próprio procurador (JEJ)
-                        if procurador_cnpj and cnpj == procurador_cnpj:
-                            # Se houver a palavra "Procuradorde" ativa na tela, significa que não estamos sob o perfil Titular!
-                            if "Procuradorde" in header_text_limpo:
-                                log(f"Perfil atual não é Titular. Solicitando alteração de perfil para voltar ao Titular ({nome})...", "INFO")
-                                alterar_perfil(page, cnpj, procurador_cnpj)
-                            else:
-                                log(f"Já estamos no perfil Titular do procurador ({nome}). Consultando diretamente.", "INFO")
+                    max_tentativas = 3
+                    sucesso_cliente = False
+                    erro_final = None
+                    
+                    for tentativa in range(1, max_tentativas + 1):
+                        try:
+                            if tentativa > 1:
+                                log(f"[TENTATIVA {tentativa}/{max_tentativas}] Reiniciando fluxo para o cliente {nome}...", "WARNING")
+                                # 0. Garantir que a sessão/login esteja ativa e renovada
+                                verificar_e_reestabelecer_sessao(page, config)
                                 
-                        # Caso B: O cliente que queremos consultar é uma empresa representada (Tome & Lopes)
-                        else:
-                            # Se o CNPJ desta empresa já estiver ativo no cabeçalho do e-CAC, pulamos a troca!
-                            if cnpj_sem_formatacao in header_text_limpo:
-                                log(f"O perfil ativo no e-CAC já corresponde a {nome} ({cnpj}). Pulando alteração de perfil.", "SUCCESS")
-                            else:
-                                log(f"Perfil atual diferente de {nome}. Alterando perfil para o CNPJ: {cnpj}...", "INFO")
-                                alterar_perfil(page, cnpj, procurador_cnpj)
+                            # 0.5. Limpar modais iniciais ou remanescentes e tratar Caixa Postal bloqueante
+                            fechar_modais_e_overlays(page)
+                            checar_e_tratar_caixa_postal(page, client_dir, config)
                             
-                        # Acessar Situação Fiscal e baixar relatório
-                        resultado = baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config)
-                        
-                        # Salvar metadados de sucesso
-                        save_client_status(config["relatorios_dir"], cnpj, nome, "Sucesso", resultado)
-                        success_count += 1
-                        
-                    except Exception as e:
-                        log(f"Erro ao processar cliente {nome} ({cnpj}): {e}", "ERROR")
-                        
-                        # Capturar screenshot do erro para diagnóstico visual na pasta do cliente
+                            # 1. Verificar qual é o perfil atualmente ativo na tela do e-CAC
+                            header_text = page.locator("body").inner_text()
+                            header_text_limpo = header_text.replace(".", "").replace("/", "").replace("-", "").replace(" ", "").replace("\n", "").replace("\r", "")
+                            
+                            cnpj_sem_formatacao = cnpj.replace(".", "").replace("/", "").replace("-", "")
+                            
+                            # Caso A: O cliente que queremos consultar é o próprio procurador (JEJ)
+                            if procurador_cnpj and cnpj == procurador_cnpj:
+                                if "Procuradorde" in header_text_limpo:
+                                    log(f"Perfil atual não é Titular. Solicitando alteração de perfil para voltar ao Titular ({nome})...", "INFO")
+                                    alterar_perfil(page, cnpj, procurador_cnpj)
+                                    checar_e_tratar_caixa_postal(page, client_dir, config)
+                                else:
+                                    log(f"Já estamos no perfil Titular do procurador ({nome}). Consultando diretamente.", "INFO")
+                                    
+                            # Caso B: O cliente que queremos consultar é uma empresa representada (Tome & Lopes)
+                            else:
+                                if cnpj_sem_formatacao in header_text_limpo:
+                                    log(f"O perfil ativo no e-CAC já corresponde a {nome} ({cnpj}). Pulando alteração de perfil.", "SUCCESS")
+                                else:
+                                    log(f"Perfil atual diferente de {nome}. Alterando perfil para o CNPJ: {cnpj}...", "INFO")
+                                    alterar_perfil(page, cnpj, procurador_cnpj)
+                                    checar_e_tratar_caixa_postal(page, client_dir, config)
+                                
+                            # Acessar Situação Fiscal e baixar relatório
+                            resultado = baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja_possui_relatorio=tem_relatorio_existente)
+                            
+                            # Salvar metadados de sucesso
+                            save_client_status(config["relatorios_dir"], cnpj, nome, "Sucesso", resultado)
+                            success_count += 1
+                            sucesso_cliente = True
+                            break
+                            
+                        except Exception as e:
+                            log(f"[ERRO - TENTATIVA {tentativa}/{max_tentativas}] Erro ao processar cliente {nome} ({cnpj}): {e}", "WARNING")
+                            erro_final = e
+                            
+                            # Capturar screenshot do erro para diagnóstico visual na pasta do cliente
+                            try:
+                                screenshot_path = os.path.join(client_dir, f"erro_tentativa_{tentativa}.png")
+                                page.screenshot(path=screenshot_path)
+                                log(f"Screenshot do erro capturado e salvo em: {screenshot_path}", "INFO")
+                            except Exception as snap_err:
+                                log(f"Não foi possível capturar screenshot do erro: {snap_err}", "WARNING")
+                                
+                            # Fechar abas extras se acumularam
+                            try:
+                                if len(context.pages) > 1:
+                                    for p_extra in context.pages[1:]:
+                                        p_extra.close()
+                            except Exception:
+                                pass
+                                
+                        finally:
+                            # Voltar a página do e-CAC para o painel principal após cada tentativa
+                            try:
+                                log("Retornando para a página inicial do e-CAC...", "ACTION")
+                                page.goto(config["portal_url"])
+                                fechar_modais_e_overlays(page)
+                                page.wait_for_selector("text=Alterar perfil de acesso", timeout=10000)
+                            except Exception as nav_err:
+                                log(f"Erro ao retornar para a página inicial: {nav_err}. Forçando reload de emergência...", "WARNING")
+                                try:
+                                    page.reload()
+                                    page.wait_for_selector("text=Alterar perfil de acesso", timeout=15000)
+                                except Exception as reload_err:
+                                    log(f"Falha crítica de recuperação ao tentar recarregar a página: {reload_err}", "ERROR")
+                                    
+                    if not sucesso_cliente:
+                        log(f"[FALHA FINAL] Não foi possível processar o cliente {nome} ({cnpj}) após {max_tentativas} tentativas.", "ERROR")
+                        # Salvar log de erro definitivo
                         try:
-                            screenshot_path = os.path.join(client_dir, "erro_execucao.png")
-                            page.screenshot(path=screenshot_path)
-                            log(f"Screenshot do erro capturado e salvo em: {screenshot_path}", "INFO")
-                        except Exception as snap_err:
-                            log(f"Não foi possível capturar screenshot do erro: {snap_err}", "WARNING")
-                        
-                        # Salvar log de erro para o cliente
-                        try:
-                            save_client_status(config["relatorios_dir"], cnpj, nome, "Erro", str(e))
+                            save_client_status(config["relatorios_dir"], cnpj, nome, "Erro", str(erro_final))
                         except Exception as save_err:
                             log(f"Não foi possível salvar status de erro para o cliente: {save_err}", "WARNING")
                         failure_count += 1
-                        
-                    finally:
-                        # Voltar a página do e-CAC para o painel principal
-                        # Sempre navegamos de volta para a URL principal do e-CAC para resetar o estado visual do menu lateral
-                        try:
-                            log("Retornando para a página inicial do e-CAC...", "ACTION")
-                            page.goto(config["portal_url"])
-                            # Usamos o seletor nativo do Playwright para o texto "Alterar perfil de acesso"
-                            page.wait_for_selector("text=Alterar perfil de acesso", timeout=10000)
-                        except Exception as nav_err:
-                            log(f"Erro ao retornar para a página inicial: {nav_err}. Tentando prosseguir.", "WARNING")
                             
                 browser.close()
                 
@@ -1097,8 +1573,14 @@ def main():
     # Adicionalmente salvamos uma cópia direto no Desktop do usuário para fácil acesso!
     try:
         desktop_dir = r"C:\Users\jejco\Desktop"
-        desktop_excel = os.path.join(desktop_dir, f"Painel_Consolidado_Pendencias_eCAC_{hoje_limpo}.xlsx")
-        gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), desktop_excel)
+        # 1. Arquivo de uso diário fixo (reutilizável)
+        desktop_excel_fixed = os.path.join(desktop_dir, "Painel_Consolidado_Pendencias_eCAC.xlsx")
+        gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), desktop_excel_fixed)
+        log(f"Painel Excel Consolidado principal atualizado no Desktop: {desktop_excel_fixed}", "SUCCESS")
+        
+        # 2. Cópia histórica com data
+        desktop_excel_dated = os.path.join(desktop_dir, f"Painel_Consolidado_Pendencias_eCAC_{hoje_limpo}.xlsx")
+        gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), desktop_excel_dated)
     except Exception as d_err:
         log(f"Aviso: Não foi possível salvar cópia no Desktop: {d_err}", "WARNING")
         
@@ -1109,6 +1591,61 @@ def main():
     log(f" - Clientes com Falha: {failure_count}", "SUMMARY")
     log(f" - Clientes Ignorados: {skipped_count}", "SUMMARY")
     log("=" * 60, "SUMMARY")
+
+    # Enviar notificação via WhatsApp (Z-API) se estiver ativo
+    if config.get("whatsapp_enabled"):
+        try:
+            hoje_fmt = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
+            mensagem = (
+                f"📢 *Escavador de Pendências e-CAC*\n"
+                f"📅 Varredura concluída em {hoje_fmt}\n\n"
+                f"✅ *Sucesso:* {success_count} empresas\n"
+                f"❌ *Falha:* {failure_count} empresas\n"
+                f"➖ *Ignorado:* {skipped_count} empresas\n\n"
+            )
+            
+            # Detalhar pendências encontradas (relatórios baixados de hoje)
+            detalhes_pendencias = []
+            detalhes_erros = []
+            today_str = datetime.date.today().strftime("%Y-%m-%d")
+            month_str = datetime.date.today().strftime("%Y-%m")
+            
+            for cliente in clientes:
+                cnpj = cliente["cnpj"]
+                nome = cliente["nome"]
+                ativo = cliente["ativo"]
+                if not ativo:
+                    continue
+                
+                nome_limpo = clean_filename(nome)
+                status_path = os.path.join(config["relatorios_dir"], nome_limpo, month_str, "status.json")
+                if os.path.exists(status_path):
+                    with open(status_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        if data.get("data_consulta") == today_str:
+                            status = data.get("status")
+                            detalhes = data.get("detalhes")
+                            if status == "Sucesso" and "Relatório" in detalhes:
+                                detalhes_pendencias.append(nome)
+                            elif status == "Erro":
+                                detalhes_erros.append(f"{nome} ({detalhes})")
+            
+            if detalhes_pendencias:
+                mensagem += "⚠️ *Empresas com Pendências (Relatório PDF Baixado):*\n"
+                for p in detalhes_pendencias:
+                    mensagem += f" - {p}\n"
+                mensagem += "\n"
+                
+            if detalhes_erros:
+                mensagem += "🚨 *Empresas com Falha no Acesso:*\n"
+                for e in detalhes_erros:
+                    mensagem += f" - {e}\n"
+                mensagem += "\n"
+                
+            mensagem += "📂 *O Painel de Controle Consolidado atualizado está disponível no seu Desktop!*"
+            enviar_whatsapp(mensagem, config)
+        except Exception as wa_err:
+            log(f"Erro ao compilar e enviar notificação do WhatsApp: {wa_err}", "ERROR")
 
 if __name__ == "__main__":
     main()
