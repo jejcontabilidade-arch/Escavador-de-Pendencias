@@ -1631,12 +1631,16 @@
                 else if (arq.nome.toLowerCase().includes('cnd')) { badgeClass = 'badge-success'; docType = 'CND'; }
                 else if (arq.nome.toLowerCase().includes('pendencias')) { badgeClass = 'badge-warning'; docType = 'REL'; }
 
+                const cnpjExibir = arq.cnpj ? formatCnpj(arq.cnpj) : 'Sem CNPJ/CPF';
                 tr.innerHTML = `
                     <td>
                         <span class="badge ${badgeClass}" style="margin-right: 8px;">${docType}</span>
                         ${arq.nome}
                     </td>
-                    <td style="font-weight: 500;">${arq.empresa}</td>
+                    <td>
+                        <div style="font-weight: 500;">${arq.empresa}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px;">${cnpjExibir}</div>
+                    </td>
                     <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">${arq.data_pasta}</td>
                     <td>${arq.data_mod}</td>
                     <td>${arq.tamanho}</td>
@@ -1657,7 +1661,8 @@
             const filtrados = listaRelatoriosCache.filter(arq => 
                 arq.nome.toLowerCase().includes(query) || 
                 arq.empresa.toLowerCase().includes(query) ||
-                arq.data_pasta.includes(query)
+                arq.data_pasta.includes(query) ||
+                (arq.cnpj && arq.cnpj.toLowerCase().includes(query))
             );
             renderizarTabelaRelatorios(filtrados);
         }
@@ -1778,8 +1783,15 @@
 
         /* --- AUXILIARY HELPERS --- */
         function formatCnpj(cnpj) {
-            if (!cnpj || cnpj.length !== 14) return cnpj;
-            return cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+            if (!cnpj) return '';
+            const c = cnpj.replace(/\D/g, '');
+            if (c.length === 11) {
+                return c.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+            }
+            if (c.length === 14) {
+                return c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+            }
+            return cnpj;
         }
     </script>
 </body>

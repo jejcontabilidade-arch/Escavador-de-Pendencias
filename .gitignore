@@ -43,6 +43,8 @@ Desktop.ini
 *.bak
 *.swp
 ~*
+null
+temp/
 
 # --- Relatórios Gerados e Dumps de Texto ---
 *.xlsx

@@ -12,14 +12,28 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 # Configuração de Logs
 def log(msg, level="INFO"):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] [{level}] {msg}")
+    msg_str = str(msg)
     
+    # Tenta obter a codificação do console, se não tiver usa utf-8
+    encoding = sys.stdout.encoding or 'utf-8'
+    try:
+        msg_encoded = msg_str.encode(encoding, errors='replace').decode(encoding)
+        print(f"[{timestamp}] [{level}] {msg_encoded}")
+    except Exception:
+        try:
+            print(f"[{timestamp}] [{level}] {msg_str.encode('ascii', errors='replace').decode('ascii')}")
+        except Exception:
+            pass
+            
     # Salvar em arquivo de log
     log_dir = "logs"
-    os.makedirs(log_dir, exist_ok=True)
-    today = datetime.date.today().strftime("%Y-%m-%d")
-    with open(os.path.join(log_dir, f"execucao_{today}.log"), "a", encoding="utf-8") as f:
-        f.write(f"[{timestamp}] [{level}] {msg}\n")
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        today = datetime.date.today().strftime("%Y-%m-%d")
+        with open(os.path.join(log_dir, f"execucao_{today}.log"), "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] [{level}] {msg_str}\n")
+    except Exception:
+        pass
 
 # Enviar o caractere inicial (se fornecido) e depois a tecla ENTER para o Windows
 def press_enter(first_char=None):
@@ -169,6 +183,70 @@ def checar_e_tratar_caixa_postal(page, client_dir, config):
     except Exception as e:
         log(f"Aviso ao tentar tratar Caixa Postal bloqueante: {e}. Prosseguindo com o fluxo...", "WARNING")
 
+# Função auxiliar para navegar para o e-CAC de forma orgânica via busca do Google
+def navegar_via_google_para_ecac(page):
+    log("Iniciando acesso organico via busca do Google para evitar falhas de rede e bloqueios...", "INFO")
+    import random
+    
+    try:
+        # 1. Abre o Google
+        log("Abrindo google.com...", "ACTION")
+        page.goto("https://www.google.com", timeout=20000)
+        
+        # Pausa humana aleatoria (1.5s a 3.0s)
+        tempo_reacao = random.uniform(1.5, 3.0)
+        page.wait_for_timeout(tempo_reacao * 1000)
+        
+        # 2. Localizar o input de busca do Google
+        selector_busca = 'textarea[name="q"], input[name="q"]'
+        page.wait_for_selector(selector_busca, timeout=8000)
+        
+        # Simular clique humano para focar no campo
+        log("Focando no campo de busca do Google...", "ACTION")
+        page.click(selector_busca)
+        page.wait_for_timeout(random.uniform(0.5, 1.0) * 1000)
+        
+        # Digitar caractere por caractere com atraso variavel
+        log("Digitando 'ecac' caractere por caractere...", "ACTION")
+        for char in "ecac":
+            page.keyboard.type(char)
+            # Atraso aleatorio por tecla (150ms a 300ms)
+            page.wait_for_timeout(random.uniform(0.15, 0.3) * 1000)
+            
+        # Pausa antes de enviar (1.0s a 2.0s)
+        page.wait_for_timeout(random.uniform(1.0, 2.0) * 1000)
+        
+        # Pressionar Enter
+        log("Enviando busca do Google...", "ACTION")
+        page.keyboard.press("Enter")
+        
+        # 3. Aguardar os resultados e inserir pausa de leitura
+        log("Aguardando exibicao dos resultados...", "ACTION")
+        selector_link = 'a[href*="cav.receita.fazenda.gov.br"]'
+        page.wait_for_selector(selector_link, timeout=12000)
+        
+        # Simular leitura humana dos resultados (2s a 4s)
+        tempo_leitura = random.uniform(2.0, 4.0)
+        log(f"Simulando leitura humana dos resultados por {tempo_leitura:.1f} segundos...", "INFO")
+        page.wait_for_timeout(tempo_leitura * 1000)
+        
+        # Focar no link e clicar de forma suave
+        log("Clicando no link do e-CAC nos resultados da busca...", "ACTION")
+        link_loc = page.locator(selector_link).first
+        link_loc.focus()
+        page.wait_for_timeout(random.uniform(0.5, 1.2) * 1000)
+        link_loc.click()
+        
+        # 4. Aguardar o carregamento final
+        page.wait_for_load_state("load")
+        log("Portal e-CAC carregado com sucesso via Google!", "SUCCESS")
+        page.wait_for_timeout(1000) # Pequena pausa de assentamento
+        
+    except Exception as e:
+        log(f"Falha na navegacao via busca do Google: {e}. Fazendo fallback para acesso direto...", "WARNING")
+        # Fallback silencioso direto para a URL do e-CAC
+        page.goto("https://cav.receita.fazenda.gov.br/ecac/", timeout=25000)
+
 # Função auxiliar para garantir que a sessão com o e-CAC está ativa e realizar login se necessário
 def verificar_e_reestabelecer_sessao(page, config):
     log("Verificando se a sessão com o e-CAC está ativa...", "INFO")
@@ -185,9 +263,9 @@ def verificar_e_reestabelecer_sessao(page, config):
         log("Sessão expirada ou deslogada. Tentando reestabelecer login automaticamente...", "WARNING")
         
         try:
-            # Se não estiver no e-CAC, vai para a página inicial
+            # Se não estiver no e-CAC, vai para a página inicial via Google
             if "cav.receita.fazenda.gov.br" not in page.url:
-                page.goto("https://cav.receita.fazenda.gov.br/ecac/")
+                navegar_via_google_para_ecac(page)
             
             # Se o botão de login do Gov.br estiver visível, clica nele
             btn_gov = page.locator('input[alt="Acesso Gov BR"]').first
@@ -204,7 +282,8 @@ def verificar_e_reestabelecer_sessao(page, config):
             def auto_confirm_dialog():
                 time.sleep(3.5)
                 log("[AUTO-LOGIN-RETRY] Janela de seleção do Windows deve estar aberta. Simulando ENTER...", "SYSTEM")
-                press_enter()
+                first_char = config.get("cert_first_char", "J")
+                press_enter(first_char)
                 time.sleep(1.2)
                 press_enter()
                 
@@ -229,6 +308,15 @@ def verificar_e_reestabelecer_sessao(page, config):
             log(f"Falha ao tentar reestabelecer login automaticamente: {e}. Solicitando intervenção manual se necessário...", "ERROR")
             if not config["headless"]:
                 log("Aguardando login manual na tela (limite de 120 segundos)...", "IMPORTANT")
+                
+                mensagem_alerta = (
+                    "⚠️ *ALERTA DO ROBÔ e-CAC (SESSÃO CAIU)*\n\n"
+                    "A sessão do e-CAC caiu durante a varredura e o login automático falhou.\n"
+                    "• *O que fazer*: Acesse o computador e conclua o login manualmente na tela do navegador (resolva o CAPTCHA se houver).\n\n"
+                    "O robô aguardará por até 2 minutos."
+                )
+                enviar_whatsapp(mensagem_alerta, config)
+                
                 try:
                     page.wait_for_selector("text=Alterar perfil de acesso", timeout=120000)
                     log("Login manual detectado com sucesso!", "SUCCESS")
@@ -243,17 +331,37 @@ def verificar_e_reestabelecer_sessao(page, config):
 
 # Carregar arquivo de configuração
 def load_config():
-    if os.path.exists("config.json"):
-        with open("config.json", "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {
+    config_path = "config.json"
+    private_config_path = "config_private.json"
+    config = {
         "headless": False,
         "timeout_ms": 30000,
         "relatorios_dir": "relatorios",
         "clientes_file": "clientes.csv",
         "portal_url": "https://cav.receita.fazenda.gov.br/eCAC/Default.aspx#",
-        "download_timeout_ms": 60000
+        "download_timeout_ms": 60000,
+        "whatsapp_enabled": True,
+        "whatsapp_number": "",
+        "whatsapp_zapi_instance": "",
+        "whatsapp_zapi_token": "",
+        "whatsapp_zapi_client_token": "",
+        "openai_api_key": ""
     }
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+                config.update(dados)
+        except Exception:
+            pass
+    if os.path.exists(private_config_path):
+        try:
+            with open(private_config_path, "r", encoding="utf-8") as f:
+                dados_privados = json.load(f)
+                config.update(dados_privados)
+        except Exception:
+            pass
+    return config
 
 # Carregar lista de clientes
 def load_clients(filepath):
@@ -320,19 +428,40 @@ def save_client_status(relatorios_dir, cnpj, nome, status, details=""):
     month = datetime.date.today().strftime("%Y-%m")
     # Limpar nome para criar pasta segura, mantendo letras acentuadas, cedilhas e espaços
     nome_limpo = "".join(c if c.isalnum() or c in " _-ÇçÁáÉéÍíÓóÚúÃãÕõÂâÊêÔôÀàÜü" else "_" for c in nome).strip()
-    client_dir = os.path.join(relatorios_dir, nome_limpo, month)
+    cnpj_limpo = "".join(filter(str.isdigit, cnpj))
+    client_dir = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}", month)
     os.makedirs(client_dir, exist_ok=True)
     
+    status_path = os.path.join(client_dir, "status.json")
+    contador_falhas = 0
+    
+    # Se já existir o status.json e for do dia de hoje, resgata o contador de falhas
+    if os.path.exists(status_path):
+        try:
+            with open(status_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get("data_consulta") == today:
+                    contador_falhas = data.get("contador_falhas_hoje", 0)
+        except Exception:
+            pass
+            
+    # Ajustar contador conforme o novo status
+    if status == "Erro":
+        contador_falhas += 1
+    elif status == "Sucesso":
+        contador_falhas = 0
+        
     status_data = {
         "cnpj": cnpj,
         "nome": nome,
         "data_consulta": today,
         "hora_consulta": datetime.datetime.now().strftime("%H:%M:%S"),
         "status": status,
-        "detalhes": details
+        "detalhes": details,
+        "contador_falhas_hoje": contador_falhas
     }
     
-    with open(os.path.join(client_dir, "status.json"), "w", encoding="utf-8") as f:
+    with open(status_path, "w", encoding="utf-8") as f:
         json.dump(status_data, f, indent=4, ensure_ascii=False)
         
     return client_dir
@@ -346,6 +475,38 @@ def format_cnpj(cnpj):
 
 def clean_filename(name):
     return "".join(c if c.isalnum() or c in " _-ÇçÁáÉéÍíÓóÚúÃãÕõÂâÊêÔôÀàÜü" else "_" for c in name).strip()
+
+def remover_arquivos_fiscais_obsoletos(client_dir, arquivo_mantido_path=None):
+    """
+    Remove todos os arquivos fiscais obsoletos na pasta do mês (client_dir),
+    como RelatorioSituacaoFiscal-*.pdf, CertidaoRegularidadeFiscal-*.pdf e Sem_Pendencias_Fiscais_Regular-*.txt,
+    deixando apenas o arquivo_mantido_path (se fornecido).
+    """
+    try:
+        padroes = [
+            "RelatorioSituacaoFiscal-*.pdf",
+            "CertidaoRegularidadeFiscal-*.pdf",
+            "Sem_Pendencias_Fiscais_Regular-*.txt"
+        ]
+        import glob
+        arquivos_fiscais = []
+        for padrao in padroes:
+            arquivos_fiscais.extend(glob.glob(os.path.join(client_dir, padrao)))
+            
+        for arq in arquivos_fiscais:
+            arq_norm = os.path.normpath(arq)
+            if arquivo_mantido_path:
+                mantido_norm = os.path.normpath(arquivo_mantido_path)
+                if arq_norm == mantido_norm:
+                    continue
+            try:
+                if os.path.exists(arq_norm):
+                    os.remove(arq_norm)
+                    log(f"Removido arquivo fiscal obsoleto: {arq_norm}", "INFO")
+            except Exception as e:
+                log(f"Não foi possível remover arquivo fiscal obsoleto {arq_norm}: {e}", "WARNING")
+    except Exception as e:
+        log(f"Erro ao remover arquivos fiscais obsoletos: {e}", "WARNING")
 
 def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
     log(f"Iniciando a geração do Painel Excel Consolidado: {output_path}", "INFO")
@@ -374,7 +535,8 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
                 continue
                 
             nome_limpo = clean_filename(nome_raw)
-            status_path = os.path.join(relatorios_dir, nome_limpo, month_str, "status.json")
+            cnpj_limpo = "".join(filter(str.isdigit, cnpj_raw))
+            status_path = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}", month_str, "status.json")
             
             status = "Pendente"
             detalhes = "Não Consultado"
@@ -389,8 +551,17 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
                         detalhes = data.get("detalhes", "Não Consultado")
                         data_hora = f"{data.get('data_consulta', today_str)} {data.get('hora_consulta', '')}".strip()
                         if status == "Erro":
-                            observacao = detalhes
-                            detalhes = "Falha no Processamento"
+                            detalhes_lower = detalhes.lower()
+                            if "procuração" in detalhes_lower or "procuracao" in detalhes_lower or "cancelada" in detalhes_lower or "inexistente" in detalhes_lower or "expirada" in detalhes_lower or "não cadastrada" in detalhes_lower or "revogada" in detalhes_lower:
+                                status = "Erro (Procuração)"
+                                msg_limpa = detalhes
+                                if "Erro do e-CAC:" in msg_limpa:
+                                    msg_limpa = msg_limpa.split("Erro do e-CAC:", 1)[1].strip()
+                                detalhes = "Procuração Inválida / Inexistente"
+                                observacao = msg_limpa
+                            else:
+                                observacao = detalhes
+                                detalhes = "Falha no Processamento"
                         elif status == "Sucesso":
                             if "Certidão" in detalhes:
                                 observacao = "CND emitida com sucesso (Sem Pendências)"
@@ -404,8 +575,8 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
                     observacao = f"Erro ao ler status: {e}"
                     
             # Verifica se há alertas de Caixa Postal capturados para este cliente
-            alerta_file = os.path.join(relatorios_dir, nome_limpo, month_str, "ALERTA_CAIXA_POSTAL.txt")
-            alerta_json = os.path.join(relatorios_dir, nome_limpo, month_str, "ALERTA_CAIXA_POSTAL.json")
+            alerta_file = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}", month_str, "ALERTA_CAIXA_POSTAL.txt")
+            alerta_json = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}", month_str, "ALERTA_CAIXA_POSTAL.json")
             alerta_texto = "-"
             
             if os.path.exists(alerta_json):
@@ -459,6 +630,9 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
         
         gray_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
         gray_font = Font(name="Calibri", size=10, color="595959")
+        
+        orange_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
+        orange_font = Font(name="Calibri", size=10, bold=True, color="C65911")
         
         thin_border_side = Side(border_style="thin", color="D3D3D3")
         data_border = Border(left=thin_border_side, right=thin_border_side, top=thin_border_side, bottom=thin_border_side)
@@ -553,6 +727,11 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
                     status_cell.font = red_font
                     detalhe_cell.fill = red_fill
                     detalhe_cell.font = red_font
+            elif st == "Erro (Procuração)":
+                status_cell.fill = orange_fill
+                status_cell.font = orange_font
+                detalhe_cell.fill = orange_fill
+                detalhe_cell.font = orange_font
             elif st == "Erro":
                 status_cell.fill = yellow_fill
                 status_cell.font = yellow_font
@@ -577,7 +756,7 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
         ws.cell(row=totais_row, column=4, value=f'=COUNTIF(D6:D{totais_row-2}, "*Certidão*") + COUNTIF(D6:D{totais_row-2}, "*Sem Pendências*")').alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=totais_row, column=5, value=f'=COUNTIF(D6:D{totais_row-2}, "*Relatório*")').alignment = Alignment(horizontal="center", vertical="center")
         ws.cell(row=totais_row, column=6, value="").alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=totais_row, column=7, value=f'=COUNTIF(C6:C{totais_row-2}, "Erro")').alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=totais_row, column=7, value=f'=COUNTIF(C6:C{totais_row-2}, "Erro*")').alignment = Alignment(horizontal="left", vertical="center")
         
         # Professional borders for accounting totals (Double bottom line)
         double_bottom = Side(border_style="double", color="FFFFFF")
@@ -640,17 +819,19 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
         
     try:
         alterar_perfil_btn.click(timeout=5000)
+        page.wait_for_timeout(1000)
     except Exception as click_err:
         log(f"Erro ao clicar no botão de perfil: {click_err}. Tentando limpar overlays de recuperação...", "WARNING")
         fechar_modais_e_overlays(page)
         # Tenta localizar e clicar novamente
         alterar_perfil_btn = page.locator("text=Alterar perfil de acesso").first
         alterar_perfil_btn.click(timeout=5000)
+        page.wait_for_timeout(1000)
     
     # Aguarda o modal de alteração de perfil estar 100% visível na tela
     log("Aguardando exibição do modal de alteração de perfil...", "ACTION")
     modal_carregado = False
-    for sel in ["text=Procurador de pessoa jurídica", "text=Procurador de Pessoa Jurídica", "text=Titular", "text=Procurador de pessoa física"]:
+    for sel in ["text=Procurador de pessoa jurídica", "text=Procurador de Pessoa Jurídica", "text=Procurador de pessoa física", "text=Procurador de Pessoa Física"]:
         try:
             loc = page.locator(sel).first
             loc.wait_for(state="visible", timeout=4000)
@@ -771,13 +952,42 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
             sucesso = True
             break
             
-        # Também verifica se há alguma mensagem de erro do e-CAC explícita na tela durante a espera
-        for erro_selector in ["text='Procuração inexistente'", "text='inexistente'", "text='expirada'", "text='Erro'", ".mensagem-erro", "#erro"]:
+        # Também verifica se há alguma mensagem de erro de procuração ou do e-CAC explícita na tela durante a espera
+        try:
+            body_text = page.locator("body").inner_text()
+            body_text_l = body_text.lower()
+            
+            # Procurar por linhas ou trechos de atenção no corpo do e-CAC
+            for line in body_text.split("\n"):
+                line_s = line.strip()
+                line_l = line_s.lower()
+                if not line_s:
+                    continue
+                
+                is_atencao = ("atenção" in line_l or "atencao" in line_l or "atençâo" in line_l)
+                is_procuracao = ("procuração" in line_l or "procuracao" in line_l or "procurador" in line_l)
+                is_cancelada_inexistente = ("cancelada" in line_l or "inexistente" in line_l or "expirada" in line_l or "não cadastrada" in line_l or "revogada" in line_l)
+                
+                if (is_atencao and (is_procuracao or is_cancelada_inexistente)) or (is_procuracao and is_cancelada_inexistente):
+                    raise Exception(f"Erro do e-CAC: {line_s}")
+            
+            # Fallback para o caso de o erro estar estruturado de outra forma
+            if "procuração" in body_text_l or "procuracao" in body_text_l:
+                if "cancelada" in body_text_l or "inexistente" in body_text_l or "expirada" in body_text_l:
+                    raise Exception("Erro do e-CAC: Procuração cancelada ou inexistente detectada na página.")
+                    
+        except Exception as body_err:
+            if "Erro do e-CAC" in str(body_err):
+                raise body_err
+
+        # Outros seletores clássicos de erro se estiverem visíveis
+        for erro_selector in [".mensagem-erro", "#erro", ".alert-danger", ".msg-erro"]:
             try:
-                loc = page.locator(erro_selector)
-                if loc.first.is_visible():
-                    erro_msg = loc.first.inner_text().strip()
-                    raise Exception(f"Erro do e-CAC: {erro_msg}")
+                loc = page.locator(erro_selector).first
+                if loc.is_visible():
+                    erro_msg = loc.inner_text().strip()
+                    if erro_msg:
+                        raise Exception(f"Erro do e-CAC: {erro_msg}")
             except Exception as e:
                 if "Erro do e-CAC" in str(e):
                     raise e
@@ -790,7 +1000,7 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
     else:
         # Se falhou e esgotou os 10 segundos, extrai o texto visível para relatar a causa exata
         page_text = page.locator("body").inner_text()
-        for palavra_chave in ["não cadastrada", "expirada", "inexistente", "erro", "restrição", "inválido", "restricao", "procuração"]:
+        for palavra_chave in ["não cadastrada", "expirada", "inexistente", "erro", "restrição", "inválido", "restricao", "procuração", "automatizado", "automatizada"]:
             if palavra_chave in page_text.lower():
                 raise Exception(f"A alteração de perfil falhou. Mensagem do e-CAC: '{page_text.strip()[:180]}...'")
                 
@@ -904,6 +1114,7 @@ def baixar_certidao_regularidade_fiscal(page, context, client_dir, cnpj, config)
         
         download.save_as(pdf_path)
         log(f"Certidão de regularidade fiscal baixada com sucesso: {pdf_path}", "SUCCESS")
+        remover_arquivos_fiscais_obsoletos(client_dir, pdf_path)
         new_page.close()
         return f"Certidão Baixada: {pdf_filename}"
         
@@ -918,6 +1129,7 @@ def baixar_certidao_regularidade_fiscal(page, context, client_dir, cnpj, config)
         with open(cnd_path, "w", encoding="utf-8") as f:
             f.write(f"Consulta realizada em {datetime.date.today().strftime('%d/%m/%Y')} às {datetime.datetime.now().strftime('%H:%M:%S')}\n")
             f.write("Status: Regular - Nenhuma pendência fiscal encontrada na Receita Federal (Emissão manual recomendada).")
+        remover_arquivos_fiscais_obsoletos(client_dir, cnd_path)
         return "Sem Pendências (Informativo Gravado)"
 
 def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja_possui_relatorio=False):
@@ -1042,8 +1254,14 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
                 btn_representar = new_page.locator("button:has-text('Representar'), .btn:has-text('Representar'), [role='button']:has-text('Representar')").first
                 btn_representar.click()
                 
-                # Aguardar 2 segundos
-                new_page.wait_for_timeout(2000)
+                # Aguardar 4 segundos para a página recarregar a representação
+                new_page.wait_for_timeout(4000)
+                
+                # Validar se a alteração foi refletida no cabeçalho
+                header_text_after = avatar_trigger.inner_text()
+                header_cnpj_after = "".join(filter(str.isdigit, header_text_after))
+                if cnpj_limpo not in header_cnpj_after:
+                    raise Exception(f"CNPJ ativo após a troca de representação ({header_cnpj_after}) não corresponde ao CNPJ esperado ({cnpj_limpo}).")
                 
                 # Clicar no centro da página (body) para conferir/remover dropdown e prosseguir
                 new_page.click("body")
@@ -1052,13 +1270,14 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
             else:
                 log(f"[NOVO-PORTAL] Representação ativa no novo portal já corresponde ao CNPJ {cnpj}.", "SUCCESS")
     except Exception as rep_err:
-        log(f"[NOVO-PORTAL] Aviso ao gerenciar representação diretamente no novo portal: {rep_err}. Prosseguindo com o fluxo existente...", "WARNING")
+        log(f"[NOVO-PORTAL] Erro crítico ao gerenciar representação diretamente no novo portal: {rep_err}", "ERROR")
+        raise Exception(f"Não foi possível estabelecer a representação no novo portal para o CNPJ {cnpj}: {rep_err}")
 
     # 3. Aguardar o carregamento dos dados da situação fiscal
     # Esta página costuma fazer consultas lentas em APIs internas. Vamos aguardar pacientemente.
     log("Aguardando carregamento da situação fiscal do cliente na Receita Federal (isso pode levar alguns segundos)...", "ACTION")
     
-    # Espera até 10 segundos no total com polling ativo para avançar IMEDIATAMENTE quando a página carregar
+    # Espera até 40 segundos no total com polling ativo para avançar IMEDIATAMENTE quando a página carregar
     selectors = [
         "text=Gerar Relatório",
         "text=Baixar Relatório",
@@ -1070,7 +1289,7 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
     ]
     
     carregado = False
-    for _ in range(10): # 10 segundos no máximo
+    for _ in range(40): # 40 segundos no máximo
         for sel in selectors:
             try:
                 if new_page.locator(sel).first.is_visible():
@@ -1085,7 +1304,7 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
     if carregado:
         log("Carregamento da situação fiscal concluído!", "SUCCESS")
     else:
-        log("Aviso: Tempo limite de carregamento de 10 segundos atingido. Verificando elementos presentes na página...", "WARNING")
+        log("Aviso: Tempo limite de carregamento de 40 segundos atingido. Verificando elementos presentes na página...", "WARNING")
         
     # 4. Analisar se o cliente tem pendências ou se está regular
     page_text = new_page.locator("body").inner_text()
@@ -1126,6 +1345,7 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
                 pdf_path = os.path.join(client_dir, pdf_filename)
                 download.save_as(pdf_path)
                 log(f"Certidão de regularidade fiscal baixada com sucesso: {pdf_path}", "SUCCESS")
+                remover_arquivos_fiscais_obsoletos(client_dir, pdf_path)
                 new_page.close()
                 return "Certidão Baixada"
             except Exception as e:
@@ -1181,6 +1401,7 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
             
             download.save_as(pdf_path)
             log(f"Relatório fiscal baixado e salvo com sucesso: {pdf_path}", "SUCCESS")
+            remover_arquivos_fiscais_obsoletos(client_dir, pdf_path)
             new_page.close()
             return "Relatório Baixado"
         except Exception as e:
@@ -1194,51 +1415,64 @@ def realizar_login_manual(config):
     log("Um navegador Google Chrome visível será aberto e tentará o login automaticamente...", "INFO")
     
     state_file = "state.json"
+    
     with sync_playwright() as p:
         try:
-            browser = p.chromium.launch(
+            log("Iniciando Chrome com perfil persistente e modo stealth...", "INFO")
+            user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chrome")
+            os.makedirs(user_data_dir, exist_ok=True)
+            context = p.chromium.launch_persistent_context(
+                user_data_dir=user_data_dir,
                 headless=False,
                 channel="chrome",
-                args=["--disable-blink-features=AutomationControlled"]
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars"
+                ],
+                no_viewport=True
             )
-        except Exception as e:
-            log(f"Não foi possível iniciar o Chrome nativo ({e}). Usando Chromium padrão do Playwright...", "WARNING")
-            browser = p.chromium.launch(
-                headless=False,
-                args=["--disable-blink-features=AutomationControlled"]
-            )
+        except Exception as e1:
+            log(f"Não foi possível iniciar o Chrome nativo ({e1}). Tentando Microsoft Edge nativo...", "WARNING")
+            try:
+                user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_msedge")
+                os.makedirs(user_data_dir, exist_ok=True)
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir=user_data_dir,
+                    headless=False,
+                    channel="msedge",
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-infobars"
+                    ],
+                    no_viewport=True
+                )
+            except Exception as e2:
+                log(f"Não foi possível iniciar o Microsoft Edge nativo ({e2}). Usando Chromium padrão...", "WARNING")
+                user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chromium")
+                os.makedirs(user_data_dir, exist_ok=True)
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir=user_data_dir,
+                    headless=False,
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-infobars"
+                    ],
+                    no_viewport=True
+                )
             
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={"width": 1280, "height": 800},
-            permissions=["geolocation"],
-            geolocation={"latitude": -15.793889, "longitude": -47.882778}
-        )
+        page = context.pages[0] if context.pages else context.new_page()
         
-        # Script de inicialização para evasão de detecção de automação (e.g. e-CAC / Gov.br)
-        context.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
-            });
-            if (!navigator.plugins || navigator.plugins.length === 0) {
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3, 4, 5]
-                });
-            }
-            Object.defineProperty(navigator, 'languages', {
-                get: () => ['pt-BR', 'pt', 'en-US', 'en']
-            });
-        """)
-        page = context.new_page()
-        
-        # Acessa e-CAC
-        page.goto("https://cav.receita.fazenda.gov.br/ecac/")
-        
-        # 1. Aguarda 2 segundos após carregar a página e clica automaticamente no botão de login do Gov.br
+        # Acessa e-CAC diretamente
+        log("Acessando a página de login do e-CAC diretamente...", "INFO")
         try:
-            log("Página carregada. Aguardando exatamente 2 segundos para iniciar...", "INFO")
-            page.wait_for_timeout(2000)
-            
+            page.goto("https://cav.receita.fazenda.gov.br/ecac/", timeout=30000)
+            page.wait_for_load_state("load")
+        except Exception as goto_err:
+            log(f"Erro ao acessar diretamente: {goto_err}. Tentando via busca orgânica do Google...", "WARNING")
+            navegar_via_google_para_ecac(page)
+        
+        # 1. Aguarda e clica automaticamente no botão de login do Gov.br
+        try:
             log("Buscando o botão de login 'Acesso Gov BR'...", "INFO")
             page.wait_for_selector('input[alt="Acesso Gov BR"]', timeout=10000)
             log("Clicando no botão de login do Gov.br...", "ACTION")
@@ -1254,7 +1488,8 @@ def realizar_login_manual(config):
             def auto_confirm_dialog():
                 time.sleep(3.5)
                 log("[AUTO-LOGIN] Janela de seleção do Windows deve estar aberta. Simulando ENTER...", "SYSTEM")
-                press_enter()
+                first_char = config.get("cert_first_char", "J")
+                press_enter(first_char)
                 # Envia um segundo ENTER por segurança após 1.2 segundos caso o foco tenha demorado
                 time.sleep(1.2)
                 press_enter()
@@ -1266,23 +1501,42 @@ def realizar_login_manual(config):
             
         except Exception as auto_err:
             log(f"Aviso no fluxo automático: {auto_err}", "WARNING")
-            log("Fluxo automático falhou ou parou. Por favor, conclua o login manualmente na tela se necessário.", "IMPORTANT")
+            log("Fluxo automático parou. Por favor, conclua o login manualmente na tela se necessário.", "IMPORTANT")
             
         try:
-            # Aguarda o elemento do cabeçalho do e-CAC aparecer (máximo 5 minutos)
-            # Isso serve tanto para o fluxo 100% automático quanto para o manual em caso de fallback!
-            page.wait_for_selector("text=Alterar perfil de acesso", timeout=300000)
-            log("Conexão e login detectados com sucesso no e-CAC!", "SUCCESS")
+            # Tenta aguardar o login automático rápido por 12 segundos primeiro
+            page.wait_for_selector("text=Alterar perfil de acesso", timeout=12000)
+            log("Conexão e login detectados com sucesso no e-CAC de forma rápida!", "SUCCESS")
+        except Exception:
+            # Se demorou mais de 12 segundos, provavelmente precisa de intervenção manual (CAPTCHA, etc.)
+            log("O login automático não concluiu in 12 segundos. Provavelmente é necessário resolver CAPTCHA ou selecionar certificado. Enviando alerta via WhatsApp...", "WARNING")
             
-            # Salvar o estado da sessão em state.json
+            mensagem_alerta = (
+                "⚠️ *ALERTA DO ROBÔ e-CAC (INÍCIO DE CICLO)*\n\n"
+                "A automação precisa de intervenção para concluir o login no e-CAC!\n"
+                "• *Causa*: Provavelmente surgiu um CAPTCHA de imagem ou confirmação de certificado na tela.\n"
+                "• *O que fazer*: Acesse a tela do navegador aberto, resolva o CAPTCHA e conclua o login Gov.br.\n\n"
+                "O robô aguardará por até 5 minutos a conclusão do login."
+            )
+            enviar_whatsapp(mensagem_alerta, config)
+            
+            # Agora aguarda o tempo longo restante (288 segundos) para a conclusão manual
+            try:
+                page.wait_for_selector("text=Alterar perfil de acesso", timeout=288000)
+                log("Conexão e login detectados com sucesso no e-CAC após intervenção manual!", "SUCCESS")
+            except Exception as e:
+                log(f"Tempo limite de 5 minutos excedido ou erro no login: {e}", "ERROR")
+                context.close()
+                return False
+                
+        # Salvar o estado da sessão em state.json
+        try:
             context.storage_state(path=state_file)
             log(f"Sessão gravada com sucesso em '{state_file}'!", "SUCCESS")
-            browser.close()
-            return True
-        except Exception as e:
-            log(f"Tempo limite de 5 minutos excedido ou erro no login: {e}", "ERROR")
-            browser.close()
-            return False
+        except Exception as e_save:
+            log(f"Aviso ao gravar sessão: {e_save}", "WARNING")
+        context.close()
+        return True
 
 def enviar_whatsapp(mensagem, config):
     if not config.get("whatsapp_enabled"):
@@ -1318,17 +1572,59 @@ def enviar_whatsapp(mensagem, config):
     
     log(f"Enviando notificação WhatsApp via Z-API para {number_clean}...", "INFO")
     try:
-        import requests
-        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
         if response.status_code in [200, 201]:
-            log("Notificação WhatsApp enviada com sucesso!", "SUCCESS")
+            log("Notificação via WhatsApp enviada com sucesso!", "SUCCESS")
             return True
         else:
             log(f"Falha ao enviar WhatsApp. Status: {response.status_code}, Resposta: {response.text}", "ERROR")
             return False
     except Exception as e:
-        log(f"Erro ao enviar requisição para Z-API: {e}", "ERROR")
+        log(f"Erro ao enviar requisição HTTP do WhatsApp: {e}", "ERROR")
         return False
+
+def atualizar_excel_dinamico(clientes, config):
+    hoje_limpo = datetime.date.today().strftime("%Y%m%d")
+    output_excel = os.path.join(
+        config.get("relatorios_dir", "relatorios"), 
+        f"Painel_Consolidado_Pendencias_eCAC_{hoje_limpo}.xlsx"
+    )
+    gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), output_excel)
+    
+    try:
+        desktop_dir = r"C:\Users\jejco\Desktop"
+        # 1. Arquivo de uso diário fixo (reutilizável)
+        desktop_excel_fixed = os.path.join(desktop_dir, "Painel_Consolidado_Pendencias_eCAC.xlsx")
+        gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), desktop_excel_fixed)
+        log(f"Painel Excel Consolidado principal atualizado no Desktop: {desktop_excel_fixed}", "SUCCESS")
+        
+        # 2. Cópia histórica com data
+        desktop_excel_dated = os.path.join(desktop_dir, f"Painel_Consolidado_Pendencias_eCAC_{hoje_limpo}.xlsx")
+        gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), desktop_excel_dated)
+    except Exception as d_err:
+        log(f"Aviso: Não foi possível salvar cópia no Desktop: {d_err}", "WARNING")
+
+def tentar_logout_ecac(page):
+    if not page:
+        return
+    log("Tentando realizar logout seguro do e-CAC...", "ACTION")
+    try:
+        # Tenta localizar e clicar nos seletores comuns de Sair no e-CAC
+        for selector in [
+            "span.botaoAzul:has-text('Sair com Segurança')",
+            "span:has-text('Sair com Segurança')",
+            ".botaoAzul",
+            "text='Sair com segurança'", "text='Sair'", "a:has-text('Sair')",
+            "#btnSair", ".btn-sair", "//a[contains(text(), 'Sair')]"
+        ]:
+            loc = page.locator(selector).first
+            if loc.is_visible(timeout=2000):
+                loc.click(timeout=3000)
+                log("Botão 'Sair' clicado com sucesso.", "SUCCESS")
+                page.wait_for_timeout(1000)
+                break
+    except Exception as e:
+        log(f"Aviso: Não foi possível clicar no botão de Sair (fechando diretamente): {e}", "WARNING")
 
 def main():
     config = load_config()
@@ -1341,6 +1637,28 @@ def main():
     state_file = "state.json"
     
     while True:
+        # Identificar procurador e letra inicial pelo arquivo .pfx (usamos para focar o certificado no Windows e evitar re-troca de perfil)
+        import glob
+        import re
+        pfx_files = glob.glob("*.pfx")
+        procurador_cnpj = ""
+        cert_first_char = "J"
+        if pfx_files:
+            filename = os.path.basename(pfx_files[0])
+            # Extrair CNPJ usando regex para buscar qualquer sequência de 14 dígitos consecutivos
+            match = re.search(r"\d{14}", filename)
+            if match:
+                procurador_cnpj = match.group(0)
+            
+            # Extrair a primeira letra da razão social (removendo números iniciais e sublinhado)
+            clean_name = re.sub(r"^\d+_", "", filename)
+            if clean_name:
+                cert_first_char = clean_name[0].upper()
+                
+        config["cert_first_char"] = cert_first_char
+        log(f"CNPJ do Procurador detectado: {procurador_cnpj or 'Não identificado'}", "INFO")
+        log(f"Caractere inicial do certificado detectado: '{cert_first_char}'", "INFO")
+        
         # Se o usuário passou --login na linha de comando, ou se o arquivo state.json não existe, força o login manual
         forçar_login = "--login" in sys.argv
         if forçar_login or not os.path.exists(state_file):
@@ -1353,19 +1671,6 @@ def main():
             if not sucesso:
                 log("Falha ao salvar a sessão autenticada. A execução da varredura foi cancelada.", "ERROR")
                 return
-                
-        # Identificar procurador pelo arquivo .pfx (usamos para evitar re-troca de perfil se for o próprio)
-        import glob
-        import re
-        pfx_files = glob.glob("*.pfx")
-        procurador_cnpj = ""
-        if pfx_files:
-            filename = os.path.basename(pfx_files[0])
-            # Extrair CNPJ usando regex para buscar qualquer sequência de 14 dígitos consecutivos
-            match = re.search(r"\d{14}", filename)
-            if match:
-                procurador_cnpj = match.group(0)
-        log(f"CNPJ do Procurador detectado: {procurador_cnpj or 'Não identificado'}", "INFO")
         
         log(f"Iniciando rotina de processamento para {len([c for c in clientes if c['ativo']])} clientes ativos...", "INFO")
         
@@ -1376,73 +1681,118 @@ def main():
         need_restart = False
         
         with sync_playwright() as p:
-            log("Iniciando navegador Google Chrome para executar a varredura automática...", "SYSTEM")
+            context = None
+            page = None
+            need_browser_restart = False
             
-            try:
-                browser = p.chromium.launch(
-                    headless=config["headless"],
-                    channel="chrome",
-                    args=["--disable-blink-features=AutomationControlled"]
-                )
-            except Exception as e:
-                log(f"Não foi possível iniciar o Chrome nativo ({e}). Usando Chromium padrão...", "WARNING")
-                browser = p.chromium.launch(
-                    headless=config["headless"],
-                    args=["--disable-blink-features=AutomationControlled"]
-                )
+            def iniciar_navegador():
+                nonlocal context, page, need_browser_restart
                 
-            # Carregamos a sessão salva anteriormente!
-            log(f"Carregando sessão autenticada a partir de '{state_file}'...", "INFO")
-            try:
-                context = browser.new_context(
-                    storage_state=state_file,
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    viewport={"width": 1280, "height": 800},
-                    permissions=["geolocation"],
-                    geolocation={"latitude": -15.793889, "longitude": -47.882778}
-                )
+                if context:
+                    try:
+                        log("Fechando navegador e-CAC anterior para iniciar uma sessão limpa...", "INFO")
+                        context.close()
+                    except Exception:
+                        pass
+                    context = None
+                    page = None
                 
-                # Script de inicialização para evasão de detecção de automação (e.g. e-CAC / Gov.br)
-                context.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
-                    });
-                    if (!navigator.plugins || navigator.plugins.length === 0) {
-                        Object.defineProperty(navigator, 'plugins', {
-                            get: () => [1, 2, 3, 4, 5]
-                        });
-                    }
-                    Object.defineProperty(navigator, 'languages', {
-                        get: () => ['pt-BR', 'pt', 'en-US', 'en']
-                    });
-                """)
-            except Exception as e:
-                log(f"Erro ao carregar o arquivo de sessão '{state_file}': {e}. Removendo o arquivo para recriá-lo.", "WARNING")
+                if need_browser_restart:
+                    log("Aguardando 1 minuto antes de reabrir o navegador e-CAC...", "WARNING")
+                    time.sleep(60)
+                    need_browser_restart = False
+                
+                log("Iniciando navegador com perfil persistente para executar a varredura automática...", "SYSTEM")
+                try:
+                    try:
+                        ch_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chrome")
+                        os.makedirs(ch_dir, exist_ok=True)
+                        context = p.chromium.launch_persistent_context(
+                            user_data_dir=ch_dir,
+                            headless=config["headless"],
+                            channel="chrome",
+                            args=[
+                                "--disable-blink-features=AutomationControlled",
+                                "--disable-infobars"
+                            ],
+                            no_viewport=True
+                        )
+                        log("Navegador Google Chrome iniciado com sucesso.", "SUCCESS")
+                    except Exception as e1:
+                        log(f"Não foi possível iniciar o Chrome nativo ({e1}). Tentando Microsoft Edge nativo...", "WARNING")
+                        try:
+                            edge_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_msedge")
+                            os.makedirs(edge_dir, exist_ok=True)
+                            context = p.chromium.launch_persistent_context(
+                                user_data_dir=edge_dir,
+                                headless=config["headless"],
+                                channel="msedge",
+                                args=[
+                                    "--disable-blink-features=AutomationControlled",
+                                    "--disable-infobars"
+                                ],
+                                no_viewport=True
+                            )
+                            log("Navegador Microsoft Edge iniciado com sucesso.", "SUCCESS")
+                        except Exception as e2:
+                            log(f"Não foi possível iniciar o Microsoft Edge nativo ({e2}). Usando Chromium padrão...", "WARNING")
+                            chromium_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chromium")
+                            os.makedirs(chromium_dir, exist_ok=True)
+                            context = p.chromium.launch_persistent_context(
+                                user_data_dir=chromium_dir,
+                                headless=config["headless"],
+                                args=[
+                                    "--disable-blink-features=AutomationControlled",
+                                    "--disable-infobars"
+                                ],
+                                no_viewport=True
+                            )
+                            log("Navegador Chromium padrão iniciado com sucesso. AVISO: O diálogo de certificados do Windows pode não ser exibido corretamente no Chromium padrão.", "WARNING")
+                except Exception as e:
+                    log(f"Erro ao inicializar contexto do navegador: {e}", "ERROR")
+                    raise e
+                
+                # Injetar os cookies salvos em state.json no contexto antes de acessar a página
                 if os.path.exists(state_file):
-                    os.remove(state_file)
-                browser.close()
-                need_restart = True
+                    try:
+                        with open(state_file, "r", encoding="utf-8") as f:
+                            state_data = json.load(f)
+                            cookies = state_data.get("cookies", [])
+                            if cookies:
+                                context.add_cookies(cookies)
+                                log("Cookies da sessão carregados com sucesso do state.json", "SUCCESS")
+                    except Exception as e_cookies:
+                        log(f"Aviso: Não foi possível injetar cookies do state.json: {e_cookies}", "WARNING")
                 
-            if not need_restart:
-                page = context.new_page()
+                page = context.pages[0] if context.pages else context.new_page()
                 
                 # Acessar diretamente a página inicial do e-CAC (já autenticado!)
                 log("Acessando portal e-CAC (reutilizando sessão ativa)...", "ACTION")
                 try:
-                    page.goto("https://cav.receita.fazenda.gov.br/ecac/")
-                    
+                    page.goto("https://cav.receita.fazenda.gov.br/ecac/", timeout=30000)
                     # Validar se a sessão ainda está ativa
-                    # Espera até 10 segundos para ver se o painel carrega diretamente.
-                    # Se a sessão expirou, o e-CAC redirecionará para a tela de login.
-                    page.wait_for_selector("text=Alterar perfil de acesso", timeout=10000)
+                    page.wait_for_selector("text=Alterar perfil de acesso", timeout=15000)
                     log("Sessão autenticada validada e ativa com sucesso!", "SUCCESS")
-                except Exception:
-                    log("A sessão salva expirou ou foi invalidada pela Receita Federal. Precisamos renovar o login.", "WARNING")
-                    if os.path.exists(state_file):
+                except Exception as e:
+                    log(f"Sessão expirada ou erro ao acessar: {e}. Tentando reestabelecer a sessão automaticamente...", "WARNING")
+                    if verificar_e_reestabelecer_sessao(page, config):
+                        log("Sessão autenticada reestabelecida com sucesso na inicialização!", "SUCCESS")
+                    else:
+                        log("Falha crítica: Não foi possível reestabelecer a sessão do e-CAC de forma automática/manual.", "ERROR")
+                        raise e
+            
+            # Tentar iniciar o navegador na primeira vez
+            try:
+                iniciar_navegador()
+            except Exception:
+                log("A sessão salva expirou ou foi invalidada pela Receita Federal. Precisamos renovar o login.", "WARNING")
+                if os.path.exists(state_file):
+                    try:
                         os.remove(state_file)
-                    browser.close()
-                    need_restart = True
-                    
+                    except Exception:
+                        pass
+                need_restart = True
+            
             if not need_restart:
                 # 2. Iterar sobre a lista de clientes
                 for cliente in clientes:
@@ -1459,8 +1809,8 @@ def main():
                     today_str = datetime.date.today().strftime("%Y-%m-%d")
                     month_str = datetime.date.today().strftime("%Y-%m")
                     nome_limpo = clean_filename(nome)
-                    
-                    client_dir = os.path.join(config["relatorios_dir"], nome_limpo, month_str)
+                    cnpj_limpo = "".join(filter(str.isdigit, cnpj))
+                    client_dir = os.path.join(config["relatorios_dir"], f"{cnpj_limpo}_{nome_limpo}", month_str)
                     status_path = os.path.join(client_dir, "status.json")
                     
                     forcar_todos = "--forcar-todos" in sys.argv
@@ -1474,6 +1824,8 @@ def main():
                         detalhes_status = "Certidão Baixada" if cnd_pdfs else "Sem Pendências (Informativo Gravado)"
                         save_client_status(config["relatorios_dir"], cnpj, nome, "Sucesso", detalhes_status)
                         success_count += 1
+                        # Atualiza a planilha de forma dinâmica
+                        atualizar_excel_dinamico(clientes, config)
                         continue
                         
                     # 2. Verificar se o cliente já foi consultado com SUCESSO hoje de fato
@@ -1490,6 +1842,27 @@ def main():
                     if ja_processado_hoje:
                         log(f"Cliente {nome} ({cnpj}) já foi consultado com SUCESSO hoje. Pulando...", "SUCCESS")
                         success_count += 1
+                        # Atualiza a planilha de forma dinâmica
+                        atualizar_excel_dinamico(clientes, config)
+                        continue
+                        
+                    # 2.5. Verificar se o cliente já falhou duas vezes hoje
+                    ja_falhou_duas_vezes_hoje = False
+                    if not forcar_todos and os.path.exists(status_path):
+                        try:
+                            with open(status_path, "r", encoding="utf-8") as f:
+                                status_data = json.load(f)
+                                if status_data.get("data_consulta") == today_str:
+                                    if status_data.get("status") == "Erro" and status_data.get("contador_falhas_hoje", 0) >= 2:
+                                        ja_falhou_duas_vezes_hoje = True
+                        except Exception:
+                            pass
+                            
+                    if ja_falhou_duas_vezes_hoje:
+                        log(f"Cliente {nome} ({cnpj}) já falhou 2 vezes hoje. Pulando processamento para evitar travamento...", "WARNING")
+                        failure_count += 1
+                        # Atualiza a planilha de forma dinâmica
+                        atualizar_excel_dinamico(clientes, config)
                         continue
                         
                     # 3. Verificar se já existe relatório de pendência na pasta do mês
@@ -1503,16 +1876,28 @@ def main():
                     # Criar diretório para salvar o relatório do cliente (já inicializa como pendente)
                     client_dir = save_client_status(config["relatorios_dir"], cnpj, nome, "Pendente", "Iniciado")
                     
-                    max_tentativas = 3
+                    # Remover imagens de erro antigas (.png) do cliente ativo na pasta do mês atual
+                    try:
+                        png_files = glob.glob(os.path.join(client_dir, "*.png"))
+                        for pf in png_files:
+                            try:
+                                os.remove(pf)
+                                log(f"Screenshot antiga removida antes de iniciar varredura: {pf}", "INFO")
+                            except Exception as rm_err:
+                                log(f"Não foi possível remover screenshot antiga: {rm_err}", "WARNING")
+                    except Exception as glob_err:
+                        log(f"Erro ao buscar screenshots antigas para remoção: {glob_err}", "WARNING")
+                        
+                    max_tentativas = 2
                     sucesso_cliente = False
                     erro_final = None
                     
                     for tentativa in range(1, max_tentativas + 1):
                         try:
-                            if tentativa > 1:
-                                log(f"[TENTATIVA {tentativa}/{max_tentativas}] Reiniciando fluxo para o cliente {nome}...", "WARNING")
-                                # 0. Garantir que a sessão/login esteja ativa e renovada
-                                verificar_e_reestabelecer_sessao(page, config)
+                            # Se for uma tentativa maior que 1, ou se o navegador foi fechado/marcado para reiniciar
+                            if tentativa > 1 or context is None or page is None or need_browser_restart:
+                                need_browser_restart = True # Força o atraso de 1 minuto em iniciar_navegador
+                                iniciar_navegador()
                                 
                             # 0.5. Limpar modais iniciais ou remanescentes e tratar Caixa Postal bloqueante
                             fechar_modais_e_overlays(page)
@@ -1555,6 +1940,28 @@ def main():
                             log(f"[ERRO - TENTATIVA {tentativa}/{max_tentativas}] Erro ao processar cliente {nome} ({cnpj}): {e}", "WARNING")
                             erro_final = e
                             
+                            # Enriquecer o erro com textos visíveis na tela (mensagens de erro do e-CAC/Gov.br)
+                            msg_tela = ""
+                            if page:
+                                try:
+                                    body_text = page.locator("body").inner_text()
+                                    linhas_erro = []
+                                    for line in body_text.split("\n"):
+                                        line_s = line.strip()
+                                        line_l = line_s.lower()
+                                        if not line_s or len(line_s) < 5:
+                                            continue
+                                        # Captura avisos, mensagens de erro do gov.br ou do e-cac
+                                        if any(x in line_l for x in ["atenção", "atencao", "erro", "restrição", "restricao", "inexistente", "cancelada", "expirada", "automatizado", "indisponível", "falha", "não cadastrada", "revogada"]):
+                                            if len(line_s) < 250: # Evita blocos excessivamente longos
+                                                linhas_erro.append(line_s)
+                                    
+                                    if linhas_erro:
+                                        msg_tela = " | ".join(linhas_erro[:3])
+                                        erro_final = Exception(f"{e} (Erro na tela: {msg_tela})")
+                                except Exception:
+                                    pass
+                            
                             # Capturar screenshot do erro para diagnóstico visual na pasta do cliente
                             try:
                                 screenshot_path = os.path.join(client_dir, f"erro_tentativa_{tentativa}.png")
@@ -1565,27 +1972,44 @@ def main():
                                 
                             # Fechar abas extras se acumularam
                             try:
-                                if len(context.pages) > 1:
+                                if context and len(context.pages) > 1:
                                     for p_extra in context.pages[1:]:
                                         p_extra.close()
                             except Exception:
                                 pass
                                 
-                        finally:
-                            # Voltar a página do e-CAC para o painel principal após cada tentativa
-                            try:
-                                log("Retornando para a página inicial do e-CAC...", "ACTION")
-                                page.goto(config["portal_url"])
-                                fechar_modais_e_overlays(page)
-                                page.wait_for_selector("text=Alterar perfil de acesso", timeout=10000)
-                            except Exception as nav_err:
-                                log(f"Erro ao retornar para a página inicial: {nav_err}. Forçando reload de emergência...", "WARNING")
+                            # Checagem de expurgo de cookies bloqueados / sessões inválidas
+                            erro_detalhado_l = (str(erro_final) + " " + msg_tela).lower()
+                            if any(palavra in erro_detalhado_l for palavra in ["automatizado", "bloqueio", "bloqueado", "expirada", "expirado", "invalido", "inválido", "sessão", "sessao", "desconectado"]):
+                                log("[RECOVERY] Bloqueio ou expiração de sessão detectado! Expurando state.json...", "WARNING")
+                                if os.path.exists(state_file):
+                                    try:
+                                        os.remove(state_file)
+                                        log("Arquivo de sessão state.json apagado para renovação.", "SUCCESS")
+                                    except Exception as rm_err:
+                                        log(f"Não foi possível remover state.json: {rm_err}", "WARNING")
+                                
+                            # Se der erro em algum processo, fechar o e-CAC (sair) para entrar novamente do início na próxima tentativa/cliente
+                            log("Realizando logout e fechando navegador do e-CAC devido a erro de execução...", "INFO")
+                            need_browser_restart = True
+                            if context:
                                 try:
-                                    page.reload()
-                                    page.wait_for_selector("text=Alterar perfil de acesso", timeout=15000)
-                                except Exception as reload_err:
-                                    log(f"Falha crítica de recuperação ao tentar recarregar a página: {reload_err}", "ERROR")
-                                    
+                                    tentar_logout_ecac(page)
+                                except Exception:
+                                    pass
+                                try:
+                                    context.close()
+                                except Exception:
+                                    pass
+                                context = None
+                                page = None
+                                
+                            # Verificar se é um erro permanente de procuração
+                            erro_str = str(e).lower()
+                            if "procuração" in erro_str or "procuracao" in erro_str or "inexistente" in erro_str or "cancelada" in erro_str or "expirada" in erro_str:
+                                log(f"[ERRO PERMANENTE] Impedimento de procuração definitivo para {nome} ({cnpj}): {e}. Pulando tentativas adicionais.", "ERROR")
+                                break
+                                
                     if not sucesso_cliente:
                         log(f"[FALHA FINAL] Não foi possível processar o cliente {nome} ({cnpj}) após {max_tentativas} tentativas.", "ERROR")
                         # Salvar log de erro definitivo
@@ -1594,8 +2018,28 @@ def main():
                         except Exception as save_err:
                             log(f"Não foi possível salvar status de erro para o cliente: {save_err}", "WARNING")
                         failure_count += 1
+                    
+                    # Atualiza a planilha Excel de forma dinâmica após processar o cliente
+                    try:
+                        atualizar_excel_dinamico(clientes, config)
+                        log(f"Painel Excel consolidado atualizado dinamicamente para o cliente {nome}.", "SUCCESS")
+                    except Exception as xls_err:
+                        log(f"Aviso ao atualizar painel Excel dinamicamente: {xls_err}", "WARNING")
+                        
+                    # Atraso regulamentar de 1 minuto entre execuções de clientes (se não houve falha que reiniciou o navegador)
+                    if not need_browser_restart:
+                        log("Aguardando 1 minuto de intervalo regulamentar antes de prosseguir para o próximo cliente...", "INFO")
+                        time.sleep(60)
                             
-                browser.close()
+            if context:
+                try:
+                    tentar_logout_ecac(page)
+                except Exception:
+                    pass
+                try:
+                    context.close()
+                except Exception:
+                    pass
                 
         if need_restart:
             # Evita loops infinitos de login manual se o argumento --login estiver na linha de comando
@@ -1606,28 +2050,9 @@ def main():
         else:
             break
             
-    # Gerar Painel Excel Consolidado J&J Contabilidade
-    hoje_limpo = datetime.date.today().strftime("%Y%m%d")
-    output_excel = os.path.join(
-        config.get("relatorios_dir", "relatorios"), 
-        f"Painel_Consolidado_Pendencias_eCAC_{hoje_limpo}.xlsx"
-    )
-    gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), output_excel)
+    # Garantir uma atualização final consolidada
+    atualizar_excel_dinamico(clientes, config)
     
-    # Adicionalmente salvamos uma cópia direto no Desktop do usuário para fácil acesso!
-    try:
-        desktop_dir = r"C:\Users\jejco\Desktop"
-        # 1. Arquivo de uso diário fixo (reutilizável)
-        desktop_excel_fixed = os.path.join(desktop_dir, "Painel_Consolidado_Pendencias_eCAC.xlsx")
-        gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), desktop_excel_fixed)
-        log(f"Painel Excel Consolidado principal atualizado no Desktop: {desktop_excel_fixed}", "SUCCESS")
-        
-        # 2. Cópia histórica com data
-        desktop_excel_dated = os.path.join(desktop_dir, f"Painel_Consolidado_Pendencias_eCAC_{hoje_limpo}.xlsx")
-        gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), desktop_excel_dated)
-    except Exception as d_err:
-        log(f"Aviso: Não foi possível salvar cópia no Desktop: {d_err}", "WARNING")
-        
     # Relatório final
     log("=" * 60, "SUMMARY")
     log(" ROTINA DE EXECUÇÃO CONCLUÍDA", "SUMMARY")
@@ -1662,7 +2087,8 @@ def main():
                     continue
                 
                 nome_limpo = clean_filename(nome)
-                status_path = os.path.join(config["relatorios_dir"], nome_limpo, month_str, "status.json")
+                cnpj_limpo = "".join(filter(str.isdigit, cnpj))
+                status_path = os.path.join(config["relatorios_dir"], f"{cnpj_limpo}_{nome_limpo}", month_str, "status.json")
                 if os.path.exists(status_path):
                     with open(status_path, "r", encoding="utf-8") as f:
                         data = json.load(f)

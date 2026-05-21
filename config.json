@@ -3,13 +3,13 @@
     "timeout_ms": 30000,
     "relatorios_dir": "relatorios",
     "clientes_file": "clientes.csv",
-    "portal_url": "https://cav.receita.fazenda.gov.br/ecac/",
+    "portal_url": "https://cav.receita.fazenda.gov.br/eCAC/Default.aspx#",
     "cert_first_char": "J",
     "download_timeout_ms": 60000,
     "whatsapp_enabled": true,
-    "whatsapp_number": "61986221356",
-    "whatsapp_zapi_instance": "3F2D41F31A42C1724633EE9FFAB8272B",
-    "whatsapp_zapi_token": "4C04B1F71AF8C3FECAB2E70F",
-    "whatsapp_zapi_client_token": "Fb93154bd71384275b3ac481c48dbda12S",
+    "whatsapp_number": "",
+    "whatsapp_zapi_instance": "",
+    "whatsapp_zapi_token": "",
+    "whatsapp_zapi_client_token": "",
     "openai_api_key": ""
 }

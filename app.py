@@ -16,6 +16,7 @@ processo_automacao = None
 
 def load_config():
     config_path = "config.json"
+    private_config_path = "config_private.json"
     config = {
         "headless": False,
         "timeout_ms": 30000,
@@ -24,7 +25,7 @@ def load_config():
         "portal_url": "https://cav.receita.fazenda.gov.br/ecac/",
         "cert_first_char": "J",
         "download_timeout_ms": 60000,
-        "whatsapp_enabled": False,
+        "whatsapp_enabled": True,
         "whatsapp_number": "",
         "whatsapp_zapi_instance": "",
         "whatsapp_zapi_token": "",
@@ -38,17 +39,52 @@ def load_config():
                 config.update(dados)
         except Exception:
             pass
+    if os.path.exists(private_config_path):
+        try:
+            with open(private_config_path, "r", encoding="utf-8") as f:
+                dados_privados = json.load(f)
+                config.update(dados_privados)
+        except Exception:
+            pass
     return config
 
 def save_config(config):
     config_path = "config.json"
+    private_config_path = "config_private.json"
+    
+    chaves_privadas = [
+        "whatsapp_zapi_instance", 
+        "whatsapp_zapi_token", 
+        "whatsapp_zapi_client_token", 
+        "openai_api_key",
+        "whatsapp_number"
+    ]
+    
+    config_publica = {}
+    config_privada = {}
+    
+    for k, v in config.items():
+        if k in chaves_privadas:
+            config_privada[k] = v
+        else:
+            config_publica[k] = v
+            
+    sucesso = True
     try:
         with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
-        return True
+            json.dump(config_publica, f, indent=4, ensure_ascii=False)
     except Exception as e:
         print(f"Erro ao salvar config.json: {e}")
-        return False
+        sucesso = False
+        
+    try:
+        with open(private_config_path, "w", encoding="utf-8") as f:
+            json.dump(config_privada, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"Erro ao salvar config_private.json: {e}")
+        sucesso = False
+        
+    return sucesso
 
 # Rota principal para a Interface Web
 @app.route("/")
@@ -653,10 +689,48 @@ def obter_status():
     })
 
 # Rotas de Relatórios e Downloads
+def migrar_pastas_relatorios(relatorios_dir, csv_path):
+    if not os.path.exists(relatorios_dir) or not os.path.exists(csv_path):
+        return
+    clientes = []
+    try:
+        with open(csv_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                c = row.get("cnpj", "").strip()
+                n = row.get("nome", "").strip()
+                if c and n:
+                    clientes.append({"cnpj": c, "nome": n})
+    except Exception as e:
+        print(f"Erro na migração ao carregar clientes: {e}")
+        return
+
+    def clean_filename(name):
+        return "".join(c if c.isalnum() or c in " _-ÇçÁáÉéÍíÓóÚúÃãÕõÂâÊêÔôÀàÜü" else "_" for c in name).strip()
+
+    for c in clientes:
+        cnpj_limpo = "".join(filter(str.isdigit, c["cnpj"]))
+        nome_limpo = clean_filename(c["nome"])
+        
+        caminho_antigo = os.path.join(relatorios_dir, nome_limpo)
+        caminho_novo = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}")
+        
+        if os.path.exists(caminho_antigo) and not os.path.exists(caminho_novo):
+            try:
+                shutil.move(caminho_antigo, caminho_novo)
+                print(f"[MIGRAÇÃO] Pasta renomeada: {caminho_antigo} -> {caminho_novo}")
+            except Exception as e:
+                print(f"[MIGRAÇÃO] Erro ao mover {caminho_antigo}: {e}")
+
 @app.route("/api/relatorios", methods=["GET"])
 def listar_relatorios():
     config = load_config()
     relatorios_dir = config.get("relatorios_dir", "relatorios")
+    csv_path = config.get("clientes_file", "clientes.csv")
+    
+    # Rodar migração de pastas
+    migrar_pastas_relatorios(relatorios_dir, csv_path)
+    
     relatorios_list = []
     
     # 1. Adicionar o Painel Consolidado do Desktop
@@ -669,11 +743,12 @@ def listar_relatorios():
             relatorios_list.append({
                 "nome": "Painel_Consolidado_Pendencias_eCAC.xlsx",
                 "caminho": "desktop/Painel_Consolidado_Pendencias_eCAC.xlsx",
-                "tamanho": f"{size / (1024):.1f} KB",
+                "tamanho": f"{size / 1024:.1f} KB",
                 "data_mod": dt_mod,
                 "empresa": "Geral (Consolidado J&J)",
                 "data_pasta": "N/A",
-                "tipo": "excel"
+                "tipo": "excel",
+                "cnpj": ""
             })
         except Exception:
             pass
@@ -696,9 +771,25 @@ def listar_relatorios():
                     rel_path = os.path.relpath(filepath, relatorios_dir)
                     parts = rel_path.split(os.sep)
                     
-                    empresa = parts[0] if len(parts) > 0 else "Outros"
+                    # Ignorar arquivos na raiz de relatorios_dir (como consolidados antigos)
+                    if len(parts) <= 1:
+                        continue
+                        
+                    empresa_raw = parts[0]
                     data_pasta = parts[1] if len(parts) > 1 else "N/A"
                     
+                    # Separar CNPJ e Nome da pasta no formato {cnpj}_{nome}
+                    cnpj = ""
+                    empresa = empresa_raw
+                    if "_" in empresa_raw:
+                        cnpj_parte, nome_parte = empresa_raw.split("_", 1)
+                        if cnpj_parte.isdigit() and len(cnpj_parte) in [11, 14]:
+                            cnpj = cnpj_parte
+                            empresa = nome_parte.replace("_", " ").strip()
+                    
+                    if not cnpj:
+                        empresa = empresa.replace("_", " ").strip()
+                        
                     caminho_web = "relatorio/" + rel_path.replace('\\', '/')
                     relatorios_list.append({
                         "nome": file,
@@ -707,7 +798,8 @@ def listar_relatorios():
                         "data_mod": dt_mod,
                         "empresa": empresa,
                         "data_pasta": data_pasta,
-                        "tipo": "excel" if file.endswith(".xlsx") else "pdf" if file.endswith(".pdf") else "outro"
+                        "tipo": "excel" if file.endswith(".xlsx") else "pdf" if file.endswith(".pdf") else "outro",
+                        "cnpj": cnpj
                     })
                 except Exception:
                     pass
