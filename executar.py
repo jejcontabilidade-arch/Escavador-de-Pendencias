@@ -1209,10 +1209,26 @@ def realizar_login_manual(config):
             )
             
         context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 800},
             permissions=["geolocation"],
             geolocation={"latitude": -15.793889, "longitude": -47.882778}
         )
+        
+        # Script de inicialização para evasão de detecção de automação (e.g. e-CAC / Gov.br)
+        context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+            if (!navigator.plugins || navigator.plugins.length === 0) {
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+            }
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['pt-BR', 'pt', 'en-US', 'en']
+            });
+        """)
         page = context.new_page()
         
         # Acessa e-CAC
@@ -1380,10 +1396,26 @@ def main():
             try:
                 context = browser.new_context(
                     storage_state=state_file,
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     viewport={"width": 1280, "height": 800},
                     permissions=["geolocation"],
                     geolocation={"latitude": -15.793889, "longitude": -47.882778}
                 )
+                
+                # Script de inicialização para evasão de detecção de automação (e.g. e-CAC / Gov.br)
+                context.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    });
+                    if (!navigator.plugins || navigator.plugins.length === 0) {
+                        Object.defineProperty(navigator, 'plugins', {
+                            get: () => [1, 2, 3, 4, 5]
+                        });
+                    }
+                    Object.defineProperty(navigator, 'languages', {
+                        get: () => ['pt-BR', 'pt', 'en-US', 'en']
+                    });
+                """)
             except Exception as e:
                 log(f"Erro ao carregar o arquivo de sessão '{state_file}': {e}. Removendo o arquivo para recriá-lo.", "WARNING")
                 if os.path.exists(state_file):
