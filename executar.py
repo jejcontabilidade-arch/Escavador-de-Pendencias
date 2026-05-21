@@ -116,9 +116,20 @@ def checar_e_tratar_caixa_postal(page, client_dir, config):
             
             # Buscar e abrir a mensagem com indicativo de alerta (!) ou não lida
             mensagem_aberta = False
+            assunto_tabela = ""
             for sel in [
                 "tr:has-text('!') a",
                 "tr.nao-lida a",
+                "xpath=//table//tr/td[4]//a",
+                "xpath=//table//tr/td[4]",
+                "xpath=//tr/td[4]//a",
+                "xpath=//tr/td[4]",
+                "xpath=//td[contains(@class, 'assunto')]//a",
+                "xpath=//td[contains(@class, 'assunto')]",
+                "xpath=//a[contains(@href, 'mensagem') or contains(@href, 'Mensagem') or contains(@href, 'Visualizar')]",
+                "xpath=//tr[contains(., 'RECEITA FEDERAL')]//td[4]//a",
+                "css=table tbody tr td a",
+                "css=table tbody tr td",
                 "td.assunto a",
                 "a:has-text('ALERTA')",
                 "a:has-text('risco')",
@@ -127,8 +138,10 @@ def checar_e_tratar_caixa_postal(page, client_dir, config):
             ]:
                 try:
                     loc = page.locator(sel).first
-                    if loc.is_visible(timeout=2000):
-                        log(f"[CAIXA-POSTAL] Abrindo mensagem importante: '{loc.inner_text().strip()}'", "ACTION")
+                    if loc.is_visible(timeout=1500):
+                        texto_msg = loc.inner_text().strip()
+                        assunto_tabela = texto_msg
+                        log(f"[CAIXA-POSTAL] Abrindo mensagem importante usando seletor '{sel}': '{texto_msg}'", "ACTION")
                         loc.click()
                         mensagem_aberta = True
                         break
@@ -144,7 +157,10 @@ def checar_e_tratar_caixa_postal(page, client_dir, config):
                 try:
                     assunto = page.locator("h1, h2, .titulo-mensagem, td.assunto").first.inner_text().strip()
                 except Exception:
-                    assunto = "Alerta Importante e-CAC"
+                    pass
+                    
+                if not assunto or len(assunto) < 3:
+                    assunto = assunto_tabela.replace("!", "").strip() if assunto_tabela else "Alerta Importante e-CAC"
                     
                 try:
                     conteudo = page.locator("body").inner_text().strip()
@@ -584,11 +600,13 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
                 try:
                     with open(alerta_json, "r", encoding="utf-8") as f_json:
                         alerta_data = json.load(f_json)
-                        alerta_texto = f"ASSUNTO: {alerta_data.get('assunto')}\n\nMENSAGEM:\n{alerta_data.get('conteudo')}"
+                        # Salva apenas o assunto no Excel consolidado para manter a legibilidade,
+                        # mantendo o conteúdo da mensagem completo nos arquivos locais do cliente (.json/.txt)
+                        alerta_texto = alerta_data.get("assunto", "Alerta Caixa Postal").strip()
                 except Exception:
-                    alerta_texto = "Erro ao carregar mensagem."
+                    alerta_texto = "Erro ao carregar assunto da mensagem."
             elif os.path.exists(alerta_file):
-                alerta_texto = "Alerta capturado (Veja o arquivo ALERTA_CAIXA_POSTAL.txt)"
+                alerta_texto = "Alerta Caixa Postal (detalhes no arquivo .txt)"
                 
             if os.path.exists(alerta_file):
                 observacao = f"[ATENÇÃO] Alerta de Caixa Postal capturado! | {observacao}"
