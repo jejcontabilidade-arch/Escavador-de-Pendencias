@@ -617,14 +617,16 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
         log(f"Falha crítica ao gerar arquivo consolidado Excel: {e}", "ERROR")
 
 def alterar_perfil(page, cnpj, procurador_cnpj):
-    log(f"Alterando perfil de acesso para o CNPJ: {cnpj}...", "ACTION")
+    is_cpf = (len(cnpj) == 11)
+    doc_tipo = "CPF" if is_cpf else "CNPJ"
+    log(f"Alterando perfil de acesso para o {doc_tipo}: {cnpj}...", "ACTION")
     
     # 0. Limpar modais de aviso/mensagem (como aviso de caixa postal)
     fechar_modais_e_overlays(page)
 
     # 1. Clicar no botão "Alterar perfil de acesso"
     alterar_perfil_btn = None
-    for selector in ["text=Alterar perfil de acesso", "#alterarPerfil", "a:has-text('Alterar perfil')", ".btn-alterar-perfil"]:
+    for selector in ["text=Alterar perfil de acesso", "#alterarPerfil", "a:has-text('Alterar')", ".btn-alterar-perfil"]:
         try:
             loc = page.locator(selector).first
             loc.wait_for(state="visible", timeout=3000)
@@ -648,7 +650,7 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
     # Aguarda o modal de alteração de perfil estar 100% visível na tela
     log("Aguardando exibição do modal de alteração de perfil...", "ACTION")
     modal_carregado = False
-    for sel in ["text=Procurador de pessoa jurídica", "text=Procurador de Pessoa Jurídica", "text=Titular"]:
+    for sel in ["text=Procurador de pessoa jurídica", "text=Procurador de Pessoa Jurídica", "text=Titular", "text=Procurador de pessoa física"]:
         try:
             loc = page.locator(sel).first
             loc.wait_for(state="visible", timeout=4000)
@@ -661,7 +663,7 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
     if not modal_carregado:
         log("Aviso: Tempo limite excedido ao aguardar visibilidade do modal. Tentando prosseguir diretamente.", "WARNING")
         
-    # Se o CNPJ de destino for o próprio procurador, mudamos para o perfil Titular usando o botão dedicado
+    # Se o CNPJ/CPF de destino for o próprio procurador, mudamos para o perfil Titular usando o botão dedicado
     if procurador_cnpj and cnpj == procurador_cnpj:
         log("Mudando de volta para o perfil Titular...", "ACTION")
         try:
@@ -692,12 +694,16 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
         except Exception as e:
             raise Exception(f"Não foi possível reverter para o perfil Titular: {e}")
             
-    # 2. Localizar o campo de entrada do CNPJ de Procurador de Pessoa Jurídica e seu respectivo botão Alterar
-    input_cnpj = None
+    # 2. Localizar o campo de entrada (CPF ou CNPJ) de Procurador e seu respectivo botão Alterar
+    input_doc = None
     btn_alterar = None
     
+    # Determinar labels e índice de fallback com base no tipo de documento
+    labels_busca = ["Procurador de pessoa física", "Procurador de Pessoa Física"] if is_cpf else ["Procurador de pessoa jurídica", "Procurador de Pessoa Jurídica"]
+    idx_fallback = 0 if is_cpf else 1
+    
     # Método 1: Busca baseada em relação ao texto da label (Ultra-resiliente e preciso)
-    for text_val in ["Procurador de pessoa jurídica", "Procurador de Pessoa Jurídica"]:
+    for text_val in labels_busca:
         try:
             # Encontra o primeiro input de texto após a label correspondente
             inp_xpath = f"xpath=(//*[contains(text(), '{text_val}')]/following::input)[1]"
@@ -710,44 +716,44 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
             inp.wait_for(state="visible", timeout=3000)
             btn.wait_for(state="visible", timeout=3000)
             
-            input_cnpj = inp
+            input_doc = inp
             btn_alterar = btn
-            log(f"Campos do perfil CNPJ localizados com sucesso via XPath baseado em label: '{text_val}'", "INFO")
+            log(f"Campos do perfil {doc_tipo} localizados com sucesso via XPath baseado em label: '{text_val}'", "INFO")
             break
         except Exception:
             continue
             
-    # Método 2: Fallback por índice global (O segundo input e o segundo botão Alterar)
-    if not input_cnpj or not btn_alterar:
-        log("Busca por label falhou ou campos não ficaram visíveis. Usando fallback de índice global...", "WARNING")
+    # Método 2: Fallback por índice global (O primeiro input para CPF e o segundo input para CNPJ)
+    if not input_doc or not btn_alterar:
+        log(f"Busca por label falhou ou campos não ficaram visíveis. Usando fallback de índice global para {doc_tipo}...", "WARNING")
         try:
             inputs = page.locator("input[type='text'], input:not([type])")
             buttons = page.locator("input[value='Alterar'], input[type='submit'], button:has-text('Alterar')")
             
-            if inputs.count() >= 2 and buttons.count() >= 2:
-                input_cnpj = inputs.nth(1)
-                btn_alterar = buttons.nth(1)
-                log("Campos do perfil CNPJ localizados via fallback de índice global.", "SUCCESS")
+            if inputs.count() > idx_fallback and buttons.count() > idx_fallback:
+                input_doc = inputs.nth(idx_fallback)
+                btn_alterar = buttons.nth(idx_fallback)
+                log(f"Campos do perfil {doc_tipo} localizados via fallback de índice global (índice {idx_fallback}).", "SUCCESS")
         except Exception as e:
             log(f"Falha ao executar fallback de índice global: {e}", "ERROR")
             
-    if not input_cnpj or not btn_alterar:
-        raise Exception("Não foi possível localizar o campo de texto do CNPJ ou o botão 'Alterar' correspondente no modal.")
+    if not input_doc or not btn_alterar:
+        raise Exception(f"Não foi possível localizar o campo de texto do {doc_tipo} ou o botão 'Alterar' correspondente no modal.")
         
-    # 3. Preencher o CNPJ no campo correto
+    # 3. Preencher o CPF/CNPJ no campo correto
     try:
-        input_cnpj.clear()
-        input_cnpj.fill(cnpj)
-        log(f"Campo de CNPJ de Procurador preenchido com: {cnpj}", "ACTION")
+        input_doc.clear()
+        input_doc.fill(cnpj)
+        log(f"Campo de {doc_tipo} de Procurador preenchido com: {cnpj}", "ACTION")
     except Exception as e:
-        raise Exception(f"Falha ao preencher o campo de CNPJ do procurador: {e}")
+        raise Exception(f"Falha ao preencher o campo de {doc_tipo} do procurador: {e}")
         
     # 4. Clicar no respectivo botão Alterar da linha
     try:
         btn_alterar.click(timeout=5000)
-        log("Botão 'Alterar' correspondente ao perfil CNPJ clicado com sucesso.", "ACTION")
+        log(f"Botão 'Alterar' correspondente ao perfil {doc_tipo} clicado com sucesso.", "ACTION")
     except Exception as e:
-        raise Exception(f"Falha ao clicar no botão 'Alterar' do perfil CNPJ: {e}")
+        raise Exception(f"Falha ao clicar no botão 'Alterar' do perfil {doc_tipo}: {e}")
         
     # 5. Validar se o perfil foi realmente alterado de forma dinâmica
     log("Aguardando atualização do cabeçalho com o novo perfil...", "ACTION")
@@ -1202,7 +1208,11 @@ def realizar_login_manual(config):
                 args=["--disable-blink-features=AutomationControlled"]
             )
             
-        context = browser.new_context(viewport={"width": 1280, "height": 800})
+        context = browser.new_context(
+            viewport={"width": 1280, "height": 800},
+            permissions=["geolocation"],
+            geolocation={"latitude": -15.793889, "longitude": -47.882778}
+        )
         page = context.new_page()
         
         # Acessa e-CAC
@@ -1370,7 +1380,9 @@ def main():
             try:
                 context = browser.new_context(
                     storage_state=state_file,
-                    viewport={"width": 1280, "height": 800}
+                    viewport={"width": 1280, "height": 800},
+                    permissions=["geolocation"],
+                    geolocation={"latitude": -15.793889, "longitude": -47.882778}
                 )
             except Exception as e:
                 log(f"Erro ao carregar o arquivo de sessão '{state_file}': {e}. Removendo o arquivo para recriá-lo.", "WARNING")

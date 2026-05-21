@@ -16,13 +16,7 @@ processo_automacao = None
 
 def load_config():
     config_path = "config.json"
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {
+    config = {
         "headless": False,
         "timeout_ms": 30000,
         "relatorios_dir": "relatorios",
@@ -34,8 +28,17 @@ def load_config():
         "whatsapp_number": "",
         "whatsapp_zapi_instance": "",
         "whatsapp_zapi_token": "",
-        "whatsapp_zapi_client_token": ""
+        "whatsapp_zapi_client_token": "",
+        "openai_api_key": ""
     }
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+                config.update(dados)
+        except Exception:
+            pass
+    return config
 
 def save_config(config):
     config_path = "config.json"
@@ -134,8 +137,8 @@ def add_cliente():
     nome = dados.get("nome", "").strip()
     ativo = dados.get("ativo", True)
     
-    if not cnpj or len(cnpj) != 14:
-        return jsonify({"status": "error", "message": "CNPJ inválido. Deve conter 14 dígitos."}), 400
+    if not cnpj or len(cnpj) not in [11, 14]:
+        return jsonify({"status": "error", "message": "CNPJ/CPF inválido. Deve conter 11 (CPF) ou 14 (CNPJ) dígitos."}), 400
     if not nome:
         return jsonify({"status": "error", "message": "Nome do cliente é obrigatório."}), 400
         
@@ -150,7 +153,7 @@ def add_cliente():
             with open(csv_path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    c = row.get("cnpj", "").strip()
+                    c = "".join(filter(str.isdigit, row.get("cnpj", "").strip()))
                     n = row.get("nome", "").strip()
                     a = row.get("ativo", "True").strip()
                     if c == cnpj:
@@ -181,8 +184,8 @@ def update_cliente(cnpj):
     nome = dados.get("nome")
     
     cnpj = "".join(filter(str.isdigit, cnpj))
-    if not cnpj or len(cnpj) != 14:
-        return jsonify({"status": "error", "message": "CNPJ inválido."}), 400
+    if not cnpj or len(cnpj) not in [11, 14]:
+        return jsonify({"status": "error", "message": "CNPJ/CPF inválido."}), 400
         
     config = load_config()
     csv_path = config.get("clientes_file", "clientes.csv")
@@ -195,7 +198,7 @@ def update_cliente(cnpj):
             with open(csv_path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    c = row.get("cnpj", "").strip()
+                    c = "".join(filter(str.isdigit, row.get("cnpj", "").strip()))
                     n = row.get("nome", "").strip()
                     a = row.get("ativo", "True").strip()
                     if c == cnpj:
@@ -224,8 +227,8 @@ def update_cliente(cnpj):
 @app.route("/api/clientes/<cnpj>", methods=["DELETE"])
 def delete_cliente(cnpj):
     cnpj = "".join(filter(str.isdigit, cnpj))
-    if not cnpj or len(cnpj) != 14:
-        return jsonify({"status": "error", "message": "CNPJ inválido."}), 400
+    if not cnpj or len(cnpj) not in [11, 14]:
+        return jsonify({"status": "error", "message": "CNPJ/CPF inválido."}), 400
         
     config = load_config()
     csv_path = config.get("clientes_file", "clientes.csv")
@@ -238,7 +241,7 @@ def delete_cliente(cnpj):
             with open(csv_path, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    c = row.get("cnpj", "").strip()
+                    c = "".join(filter(str.isdigit, row.get("cnpj", "").strip()))
                     n = row.get("nome", "").strip()
                     a = row.get("ativo", "True").strip()
                     if c == cnpj:
@@ -261,9 +264,145 @@ def delete_cliente(cnpj):
     except Exception as e:
         return jsonify({"status": "error", "message": f"Erro ao salvar CSV: {str(e)}"}), 500
 
-# Rota para Importação de PDF
-@app.route("/api/clientes/importar-pdf", methods=["POST"])
-def importar_pdf():
+# Funções de extração inteligente
+def extrair_clientes_openai(text, api_key):
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    
+    prompt = """Você é um assistente especializado em extrair dados cadastrais de documentos.
+Dado o texto bruto abaixo, extraia todos os clientes encontrados. Para cada cliente, você deve identificar:
+1. O CNPJ (14 dígitos) ou CPF (11 dígitos).
+2. O Nome/Razão Social da empresa ou cliente.
+
+Retorne APENAS um JSON no seguinte formato (sem markdown ou blocos de código):
+[
+  {"cnpj": "00000000000000", "nome": "NOME DO CLIENTE"},
+  {"cnpj": "11111111111", "nome": "NOME DO OUTRO CLIENTE"}
+]
+
+Atenção: 
+- O campo 'cnpj' deve conter apenas os dígitos numéricos (seja CPF com 11 dígitos ou CNPJ com 14 dígitos).
+- Ignore CPFs ou CNPJs da própria contabilidade ou órgãos públicos (como Receita Federal).
+- Se não encontrar nenhum cliente, retorne um array vazio.
+
+Texto bruto:
+"""
+    
+    truncated_text = text[:60000]
+    
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": "Você é um assistente de extração de dados estruturados."},
+            {"role": "user", "content": prompt + truncated_text}
+        ],
+        "temperature": 0.0,
+        "response_format": {"type": "json_object"}
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
+            import json
+            data = json.loads(content)
+            if isinstance(data, list):
+                return data
+            elif isinstance(data, dict):
+                for k, v in data.items():
+                    if isinstance(v, list):
+                        return v
+            return []
+        else:
+            print(f"Erro na API da OpenAI: Status {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"Falha na requisição da OpenAI: {e}")
+        return None
+
+def extrair_clientes_heuristica(text):
+    import re
+    cnpj_pattern = re.compile(r'\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b|\b\d{14}\b')
+    cpf_pattern = re.compile(r'\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b')
+    
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    extracted = {}
+    
+    cnpjs_a_excluir = {
+        "02241127000128", "38050811000170", "37115714000155",
+        "38050753000184", "01599281000103", "37992979000131",
+        "37993599000111", "02273061000158", "05443435000124"
+    }
+    
+    def eh_nome_valido(s):
+        s = s.strip()
+        if len(s) < 3 or len(s) > 80:
+            return False
+        if sum(c.isdigit() for c in s) > 3:
+            return False
+        pular_termos = ["cnpj", "cpf", "relatorio", "cadastro", "receita federal", "situação fiscal", "procurador", "emissão", "página", "data", "hora"]
+        if any(t in s.lower() for t in pular_termos):
+            return False
+        return True
+
+    for idx, line in enumerate(lines):
+        cnpjs_found = cnpj_pattern.findall(line)
+        cpfs_found = cpf_pattern.findall(line)
+        
+        docs_found = []
+        for c in cnpjs_found:
+            clean_c = "".join(filter(str.isdigit, c))
+            if clean_c not in cnpjs_a_excluir:
+                docs_found.append((clean_c, "CNPJ"))
+        for c in cpfs_found:
+            clean_c = "".join(filter(str.isdigit, c))
+            if clean_c not in cnpjs_a_excluir:
+                docs_found.append((clean_c, "CPF"))
+                
+        for doc, tipo in docs_found:
+            nome_encontrado = None
+            linha_limpa = line
+            for raw_doc in (cnpjs_found + cpfs_found):
+                linha_limpa = linha_limpa.replace(raw_doc, "")
+            for label in ["Empresa:", "CNPJ/CPF:", "CNPJ:", "CPF:", "Nome:", "Cliente:", "Razão Social:", "Razao Social:"]:
+                linha_limpa = re.sub(re.escape(label), "", linha_limpa, flags=re.IGNORECASE)
+            linha_limpa = re.sub(r'[\s\-:;,/]+', ' ', linha_limpa).strip()
+            
+            if eh_nome_valido(linha_limpa):
+                nome_encontrado = linha_limpa
+                
+            if not nome_encontrado:
+                if idx - 1 >= 0:
+                    prev_line = lines[idx - 1]
+                    for label in ["Empresa:", "Nome:", "Cliente:", "Razão Social:", "Razao Social:"]:
+                        prev_line = re.sub(re.escape(label), "", prev_line, flags=re.IGNORECASE)
+                    prev_line = re.sub(r'[\s\-:;,/]+', ' ', prev_line).strip()
+                    if eh_nome_valido(prev_line):
+                        nome_encontrado = prev_line
+            
+            if not nome_encontrado:
+                if idx + 1 < len(lines):
+                    next_line = lines[idx + 1]
+                    for label in ["Empresa:", "Nome:", "Cliente:", "Razão Social:", "Razao Social:"]:
+                        next_line = re.sub(re.escape(label), "", next_line, flags=re.IGNORECASE)
+                    next_line = re.sub(r'[\s\-:;,/]+', ' ', next_line).strip()
+                    if eh_nome_valido(next_line):
+                        nome_encontrado = next_line
+                        
+            if not nome_encontrado:
+                nome_encontrado = f"Cliente {tipo} {doc[:4]}..."
+                
+            extracted[doc] = nome_encontrado.upper()
+            
+    return [{"cnpj": doc, "nome": nome} for doc, nome in extracted.items()]
+
+# Rota para Importação Inteligente de Clientes (PDF/TXT)
+@app.route("/api/clientes/importar", methods=["POST"])
+def importar_clientes():
     if "file" not in request.files:
         return jsonify({"status": "error", "message": "Nenhum arquivo enviado."}), 400
         
@@ -271,55 +410,57 @@ def importar_pdf():
     if file.filename == "":
         return jsonify({"status": "error", "message": "Nome do arquivo vazio."}), 400
         
-    if not file.filename.lower().endswith(".pdf"):
-        return jsonify({"status": "error", "message": "O arquivo deve ser um PDF."}), 400
+    filename_lower = file.filename.lower()
+    if not (filename_lower.endswith(".pdf") or filename_lower.endswith(".txt")):
+        return jsonify({"status": "error", "message": "O arquivo deve ser um PDF ou TXT."}), 400
         
-    # Salvar temporariamente
     temp_dir = "temp"
     os.makedirs(temp_dir, exist_ok=True)
-    temp_path = os.path.join(temp_dir, "importar_temp.pdf")
+    ext = "pdf" if filename_lower.endswith(".pdf") else "txt"
+    temp_path = os.path.join(temp_dir, f"importar_temp.{ext}")
     file.save(temp_path)
     
     config = load_config()
     csv_path = config.get("clientes_file", "clientes.csv")
+    openai_key = config.get("openai_api_key", "").strip()
     
     try:
-        import pypdf
-        reader = pypdf.PdfReader(temp_path)
-        extracted_companies = {}
-        
-        for page in reader.pages:
-            text = page.extract_text()
-            if not text:
-                continue
-            lines = [line.strip() for line in text.split('\n') if line.strip()]
-            
-            company_name = None
-            cnpj = None
-            
-            for idx, line in enumerate(lines):
-                if "Código Nome Admissão Vcto" in line or "Código Nome Admissão" in line:
-                    if idx + 1 < len(lines):
-                        company_name = lines[idx + 1]
-                if "Empresa: CNPJ/CPF:" in line:
-                    parts = line.split("Empresa: CNPJ/CPF:")
-                    if len(parts) > 1:
-                        raw_cnpj = parts[1].strip()
-                        cnpj = "".join(filter(str.isdigit, raw_cnpj))
-                        
-            if company_name and cnpj:
-                company_name = company_name.replace("Emissão:", "").strip()
-                if cnpj not in extracted_companies or len(company_name) > len(extracted_companies[cnpj]):
-                    extracted_companies[cnpj] = company_name
+        text = ""
+        if ext == "pdf":
+            import pypdf
+            reader = pypdf.PdfReader(temp_path)
+            extracted_pages = []
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    extracted_pages.append(page_text)
+            text = "\n".join(extracted_pages)
+        else:
+            try:
+                with open(temp_path, "r", encoding="utf-8") as f:
+                    text = f.read()
+            except Exception:
+                with open(temp_path, "r", encoding="latin-1", errors="ignore") as f:
+                    text = f.read()
                     
-        # CNPJs de exemplo a excluir do PDF
-        cnpjs_a_excluir = {
-            "02241127000128", "38050811000170", "37115714000155",
-            "38050753000184", "01599281000103", "37992979000131",
-            "37993599000111", "02273061000158"
-        }
+        if not text.strip():
+            return jsonify({"status": "error", "message": "Não foi possível extrair nenhum texto do arquivo enviado."}), 400
+
+        extracted_clients = None
         
-        # Carregar clientes existentes
+        if openai_key:
+            print("Tentando extrair clientes usando a OpenAI...")
+            extracted_clients = extrair_clientes_openai(text, openai_key)
+            if extracted_clients is not None:
+                print(f"Extração via OpenAI concluída. Clientes encontrados: {len(extracted_clients)}")
+            else:
+                print("Extração via OpenAI falhou. Usando fallback de Heurística/Regex local.")
+                
+        if extracted_clients is None:
+            print("Usando extração baseada em Heurística/Regex local...")
+            extracted_clients = extrair_clientes_heuristica(text)
+            print(f"Extração local concluída. Clientes encontrados: {len(extracted_clients)}")
+
         clientes_atuais = {}
         if os.path.exists(csv_path):
             with open(csv_path, "r", encoding="utf-8-sig") as f_csv:
@@ -329,35 +470,43 @@ def importar_pdf():
                     n = row.get("nome", "").strip()
                     a = row.get("ativo", "True").strip()
                     if c:
-                        clientes_atuais[c] = {"nome": n, "ativo": a}
+                        clean_c = "".join(filter(str.isdigit, c))
+                        clientes_atuais[clean_c] = {"nome": n, "ativo": a}
                         
-        # Mesclar novos clientes extraídos do PDF
+        cnpjs_a_excluir = {
+            "02241127000128", "38050811000170", "37115714000155",
+            "38050753000184", "01599281000103", "37992979000131",
+            "37993599000111", "02273061000158"
+        }
+        
         novos_contados = 0
-        for c, n in extracted_companies.items():
+        for item in extracted_clients:
+            c = "".join(filter(str.isdigit, item.get("cnpj", "")))
+            n = item.get("nome", "").strip().upper()
+            
+            if not c or len(c) not in [11, 14] or not n:
+                continue
             if c in cnpjs_a_excluir:
                 continue
+                
             if c in clientes_atuais:
-                # Atualiza nome se o extraído for maior
                 if len(n) > len(clientes_atuais[c]["nome"]):
                     clientes_atuais[c]["nome"] = n
             else:
                 clientes_atuais[c] = {"nome": n, "ativo": "True"}
                 novos_contados += 1
                 
-        # Garantir Tome & Lopes e JEJ
         if "26470042000180" not in clientes_atuais:
             clientes_atuais["26470042000180"] = {"nome": "TOME & LOPES RESTAURANTE E LANCHONETE LTDA", "ativo": "True"}
         if "05443435000124" not in clientes_atuais:
             clientes_atuais["05443435000124"] = {"nome": "J&J SERVICOS PROFISSIONAIS LTDA", "ativo": "True"}
             
-        # Gravar de volta no CSV
         with open(csv_path, "w", newline="", encoding="utf-8") as f_csv:
             writer_csv = csv.writer(f_csv)
             writer_csv.writerow(["cnpj", "nome", "ativo"])
             for c, data in clientes_atuais.items():
                 writer_csv.writerow([c, data["nome"], data["ativo"]])
                 
-        # Limpar arquivo temporário
         if os.path.exists(temp_path):
             os.remove(temp_path)
             
@@ -369,7 +518,7 @@ def importar_pdf():
     except Exception as e:
         if os.path.exists(temp_path):
             os.remove(temp_path)
-        return jsonify({"status": "error", "message": f"Erro ao processar PDF: {str(e)}"}), 500
+        return jsonify({"status": "error", "message": f"Erro ao processar arquivo: {str(e)}"}), 500
 
 # Rotas de Execução da Automação
 @app.route("/api/executar/iniciar", methods=["POST"])

@@ -599,6 +599,64 @@
             margin-top: 10px;
         }
 
+        /* Modal Tabs and Dropzone styles */
+        .modal-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 10px;
+        }
+        .modal-tab-btn {
+            flex: 1;
+            padding: 12px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .modal-tab-btn.active {
+            border-bottom-color: var(--primary);
+            color: var(--text-color);
+        }
+        .modal-tab-btn:hover:not(.active) {
+            color: var(--text-color);
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+        .dropzone {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 32px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            background-color: rgba(255, 255, 255, 0.01);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        .dropzone:hover, .dropzone.dragover {
+            border-color: var(--primary);
+            background-color: rgba(58, 134, 200, 0.05);
+        }
+        .dropzone svg {
+            width: 44px;
+            height: 44px;
+            color: var(--text-muted);
+            transition: var(--transition);
+        }
+        .dropzone:hover svg, .dropzone.dragover svg {
+            color: var(--primary);
+            transform: translateY(-2px);
+        }
+        .dropzone p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
         /* Dynamic Status Indicator Animation */
         .status-dot {
             width: 12px;
@@ -821,13 +879,6 @@
                     </div>
 
                     <div class="action-btns">
-                        <!-- Import PDF Button -->
-                        <button class="btn btn-secondary" onclick="document.getElementById('pdf-file-input').click()">
-                            <svg style="width: 18px; height: 18px; fill: currentColor;" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-                            Importar Férias PDF
-                        </button>
-                        <input type="file" id="pdf-file-input" style="display: none;" accept=".pdf" onchange="importarClientesPdf(event)">
-
                         <button class="btn btn-primary" onclick="abrirModalCliente()">
                             <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                             Adicionar Cliente
@@ -946,6 +997,12 @@
                             <label for="cfg-timeout">Tempo Limite Carregamento (Segundos)</label>
                             <input type="number" class="form-input" id="cfg-timeout" min="10" max="300" required>
                         </div>
+
+                        <div class="form-group">
+                            <label for="cfg-openai-key">Chave de API OpenAI (Opcional)</label>
+                            <input type="password" class="form-input" id="cfg-openai-key" placeholder="Ex: sk-proj-...">
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Utilizada para extrair CPF/CNPJ de forma inteligente de arquivos importados. Se vazia, usa a heurística local.</span>
+                        </div>
                     </div>
 
                     <!-- WhatsApp Settings (Z-API) -->
@@ -1001,29 +1058,60 @@
             <div class="modal-header">
                 <h3 id="modal-cliente-titulo">Adicionar Novo Cliente</h3>
             </div>
+            
+            <!-- Abas do Modal -->
+            <div class="modal-tabs" id="modal-cliente-tabs">
+                <button class="modal-tab-btn active" id="tab-btn-manual" onclick="mudarTabCliente('manual')">Cadastro Manual</button>
+                <button class="modal-tab-btn" id="tab-btn-importar" onclick="mudarTabCliente('importar')">Extrair de Arquivo</button>
+            </div>
+
             <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
-                <div class="form-group">
-                    <label for="modal-input-cnpj">CNPJ do Cliente (apenas números)</label>
-                    <input type="text" class="form-input" id="modal-input-cnpj" maxlength="14" placeholder="Ex: 00000000000000">
+                <!-- Aba Cadastro Manual -->
+                <div id="tab-content-manual" style="display: flex; flex-direction: column; gap: 16px;">
+                    <div class="form-group">
+                        <label for="modal-input-cnpj">CPF ou CNPJ do Cliente (apenas números)</label>
+                        <input type="text" class="form-input" id="modal-input-cnpj" maxlength="14" placeholder="Ex: 00000000000000 ou 00000000000">
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-input-nome">Razão Social / Nome do Cliente</label>
+                        <input type="text" class="form-input" id="modal-input-nome" placeholder="Ex: Empresa Exemplo Ltda ou João da Silva">
+                    </div>
+                    <div class="form-row-checkbox">
+                        <label class="switch">
+                            <input type="checkbox" id="modal-input-ativo" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <div>
+                            <h4 style="font-size: 0.9rem;">Ativo para processamento</h4>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Incluir este cliente na próxima execução da varredura.</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="modal-input-nome">Razão Social / Nome da Empresa</label>
-                    <input type="text" class="form-input" id="modal-input-nome" placeholder="Ex: Empresa Exemplo Ltda">
-                </div>
-                <div class="form-row-checkbox">
-                    <label class="switch">
-                        <input type="checkbox" id="modal-input-ativo" checked>
-                        <span class="slider"></span>
-                    </label>
-                    <div>
-                        <h4 style="font-size: 0.9rem;">Ativo para processamento</h4>
-                        <span style="font-size: 0.75rem; color: var(--text-muted);">Incluir esta empresa na próxima execução da varredura.</span>
+
+                <!-- Aba Importação de Arquivo -->
+                <div id="tab-content-importar" style="display: none; flex-direction: column; gap: 16px;">
+                    <div class="form-group">
+                        <label>Selecione um Arquivo (PDF ou TXT)</label>
+                        <div class="dropzone" id="dropzone-cliente" 
+                             onclick="document.getElementById('importar-cliente-file').click()"
+                             ondragover="handleDragOverCliente(event)"
+                             ondragleave="handleDragLeaveCliente(event)"
+                             ondrop="handleDropCliente(event)">
+                            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                            <p id="dropzone-text">Arraste o arquivo aqui ou clique para selecionar</p>
+                            <span id="dropzone-file-info" style="font-size: 0.8rem; color: var(--accent); font-weight: 500; text-align: center;"></span>
+                            <input type="file" id="importar-cliente-file" style="display: none;" accept=".pdf,.txt" onchange="handleFileSelectCliente(this)">
+                        </div>
+                        <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; display: block; text-align: center;">
+                            O arquivo será lido de forma inteligente para detectar novos CPFs/CNPJs e nomes e adicioná-los.
+                        </span>
                     </div>
                 </div>
             </div>
+            
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="fecharModalCliente()">Cancelar</button>
-                <button class="btn btn-primary" onclick="salvarModalCliente()">Confirmar</button>
+                <button class="btn btn-primary" id="modal-confirm-btn" onclick="salvarModalCliente()">Confirmar</button>
             </div>
         </div>
     </div>
@@ -1313,23 +1401,61 @@
 
         // Modal de cliente (Adicionar / Editar)
         let editandoCnpj = null;
+        let modalClienteAbaAtiva = 'manual';
+        let modalClienteArquivoSelecionado = null;
+
+        function mudarTabCliente(tab) {
+            modalClienteAbaAtiva = tab;
+            const btnManual = document.getElementById('tab-btn-manual');
+            const btnImportar = document.getElementById('tab-btn-importar');
+            const contentManual = document.getElementById('tab-content-manual');
+            const contentImportar = document.getElementById('tab-content-importar');
+            const btnConfirmar = document.getElementById('modal-confirm-btn');
+
+            if (tab === 'manual') {
+                btnManual.classList.add('active');
+                btnImportar.classList.remove('active');
+                contentManual.style.display = 'flex';
+                contentImportar.style.display = 'none';
+                btnConfirmar.innerText = "Confirmar";
+            } else {
+                btnManual.classList.remove('active');
+                btnImportar.classList.add('active');
+                contentManual.style.display = 'none';
+                contentImportar.style.display = 'flex';
+                btnConfirmar.innerText = "Processar Arquivo";
+            }
+        }
 
         function abrirModalCliente(cnpj = null, nome = '', ativo = true) {
             editandoCnpj = cnpj;
             const modal = document.getElementById('modal-cliente');
             const titulo = document.getElementById('modal-cliente-titulo');
+            const tabs = document.getElementById('modal-cliente-tabs');
             const inputCnpj = document.getElementById('modal-input-cnpj');
             const inputNome = document.getElementById('modal-input-nome');
             const inputAtivo = document.getElementById('modal-input-ativo');
+            
+            // Reseta a aba para 'manual'
+            mudarTabCliente('manual');
+            
+            // Reseta dropzone/arquivo
+            modalClienteArquivoSelecionado = null;
+            document.getElementById('importar-cliente-file').value = '';
+            document.getElementById('dropzone-file-info').innerText = '';
+            document.getElementById('dropzone-text').innerText = 'Arraste o arquivo aqui ou clique para selecionar';
+            document.getElementById('dropzone-cliente').classList.remove('dragover');
 
             if (cnpj) {
                 titulo.innerText = "Editar Cliente";
+                tabs.style.display = 'none'; // Esconde abas na edição
                 inputCnpj.value = cnpj;
-                inputCnpj.disabled = true; // Não deixa editar o CNPJ na edição
+                inputCnpj.disabled = true; // Não deixa editar o CNPJ/CPF
                 inputNome.value = nome;
                 inputAtivo.checked = ativo;
             } else {
                 titulo.innerText = "Adicionar Novo Cliente";
+                tabs.style.display = 'flex'; // Mostra abas na criação
                 inputCnpj.value = '';
                 inputCnpj.disabled = false;
                 inputNome.value = '';
@@ -1342,13 +1468,91 @@
             document.getElementById('modal-cliente').style.display = 'none';
         }
 
+        function handleDragOverCliente(e) {
+            e.preventDefault();
+            document.getElementById('dropzone-cliente').classList.add('dragover');
+        }
+
+        function handleDragLeaveCliente(e) {
+            e.preventDefault();
+            document.getElementById('dropzone-cliente').classList.remove('dragover');
+        }
+
+        function handleDropCliente(e) {
+            e.preventDefault();
+            document.getElementById('dropzone-cliente').classList.remove('dragover');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                validarEDefinirArquivoCliente(e.dataTransfer.files[0]);
+            }
+        }
+
+        function handleFileSelectCliente(input) {
+            if (input.files && input.files.length > 0) {
+                validarEDefinirArquivoCliente(input.files[0]);
+            }
+        }
+
+        function validarEDefinirArquivoCliente(file) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (ext !== 'pdf' && ext !== 'txt') {
+                showToast("Por favor, selecione apenas arquivos .pdf ou .txt", "error");
+                return;
+            }
+            modalClienteArquivoSelecionado = file;
+            document.getElementById('dropzone-text').innerText = "Arquivo selecionado:";
+            document.getElementById('dropzone-file-info').innerText = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+        }
+
+        async function importarArquivoCliente() {
+            if (!modalClienteArquivoSelecionado) {
+                alert("Selecione um arquivo PDF ou TXT primeiro.");
+                return;
+            }
+
+            const btnConfirmar = document.getElementById('modal-confirm-btn');
+            const originalText = btnConfirmar.innerText;
+            btnConfirmar.innerText = "Processando...";
+            btnConfirmar.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', modalClienteArquivoSelecionado);
+
+            showToast("Fazendo upload e extraindo clientes de forma inteligente...", "warning");
+            try {
+                const response = await fetch('/api/clientes/importar', {
+                    method: 'POST',
+                    body: formData
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                    fecharModalCliente();
+                    carregarClientes();
+                } else {
+                    showToast(res.message || "Erro desconhecido ao processar arquivo.", "error");
+                }
+            } catch (err) {
+                showToast("Falha na requisição de importação.", "error");
+            } finally {
+                btnConfirmar.innerText = originalText;
+                btnConfirmar.disabled = false;
+            }
+        }
+
         async function salvarModalCliente() {
-            const cnpj = document.getElementById('modal-input-cnpj').value.trim();
+            if (modalClienteAbaAtiva === 'importar') {
+                await importarArquivoCliente();
+                return;
+            }
+
+            const rawCnpj = document.getElementById('modal-input-cnpj').value.trim();
             const nome = document.getElementById('modal-input-nome').value.trim();
             const ativo = document.getElementById('modal-input-ativo').checked;
 
-            if (!cnpj || cnpj.length !== 14 || isNaN(cnpj)) {
-                alert("O CNPJ deve conter exatamente 14 dígitos numéricos.");
+            const cnpj = rawCnpj.replace(/\D/g, '');
+
+            if (!cnpj || (cnpj.length !== 11 && cnpj.length !== 14)) {
+                alert("O documento deve conter exatamente 11 (CPF) ou 14 (CNPJ) dígitos numéricos.");
                 return;
             }
             if (!nome) {
@@ -1385,34 +1589,6 @@
             } catch (err) {
                 showToast("Erro ao salvar cadastro do cliente.", "error");
             }
-        }
-
-        // Importação de Clientes via PDF
-        async function importarClientesPdf(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            showToast("Fazendo upload e processando PDF de férias...", "warning");
-            try {
-                const response = await fetch('/api/clientes/importar-pdf', {
-                    method: 'POST',
-                    body: formData
-                });
-                const res = await response.json();
-                if (response.ok) {
-                    showToast(res.message, "success");
-                    carregarClientes();
-                } else {
-                    showToast(res.message, "error");
-                }
-            } catch (err) {
-                showToast("Falha na importação do arquivo PDF.", "error");
-            }
-            // Limpa o valor para permitir re-upload do mesmo arquivo
-            event.target.value = '';
         }
 
         /* --- REPORTS / DOWNLOADS LOGIC --- */
@@ -1500,6 +1676,7 @@
                 document.getElementById('cfg-cert').value = config.cert_first_char || 'J';
                 document.getElementById('cfg-headless').checked = config.headless;
                 document.getElementById('cfg-timeout').value = (config.timeout_ms || 30000) / 1000;
+                document.getElementById('cfg-openai-key').value = config.openai_api_key || '';
                 
                 document.getElementById('cfg-wa-enabled').checked = config.whatsapp_enabled;
                 document.getElementById('cfg-wa-number').value = config.whatsapp_number || '';
@@ -1525,6 +1702,7 @@
             const cert = document.getElementById('cfg-cert').value.trim();
             const headless = document.getElementById('cfg-headless').checked;
             const timeoutSec = document.getElementById('cfg-timeout').value;
+            const openaiApiKey = document.getElementById('cfg-openai-key').value.trim();
             
             const waEnabled = document.getElementById('cfg-wa-enabled').checked;
             const waNumber = document.getElementById('cfg-wa-number').value.trim();
@@ -1536,6 +1714,7 @@
                 cert_first_char: cert,
                 headless: headless,
                 timeout_ms: timeoutSec * 1000,
+                openai_api_key: openaiApiKey,
                 whatsapp_enabled: waEnabled,
                 whatsapp_number: waNumber,
                 whatsapp_zapi_instance: waInstance,
