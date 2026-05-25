@@ -1973,6 +1973,7 @@ def main():
                     
                     # Criar diretório para salvar o relatório do cliente (já inicializa como pendente)
                     client_dir = save_client_status(config["relatorios_dir"], cnpj, nome, "Pendente", "Iniciado")
+                    enviar_whatsapp(f"🤖 *Processando*: {nome} ({cnpj})", config)
                     
                     # Limpar todos os arquivos e pastas da execução anterior antes de iniciar varredura
                     remover_arquivos_fiscais_obsoletos(client_dir)
@@ -2021,6 +2022,7 @@ def main():
                             
                             # Salvar metadados de sucesso
                             save_client_status(config["relatorios_dir"], cnpj, nome, "Sucesso", resultado)
+                            enviar_whatsapp(f"✅ *Sucesso*: {nome} - {resultado}", config)
                             success_count += 1
                             sucesso_cliente = True
                             break
@@ -2130,6 +2132,7 @@ def main():
                         # Salvar log de erro definitivo
                         try:
                             save_client_status(config["relatorios_dir"], cnpj, nome, "Erro", str(erro_final))
+                            enviar_whatsapp(f"❌ *Falha*: {nome} - {str(erro_final)}", config)
                         except Exception as save_err:
                             log(f"Não foi possível salvar status de erro para o cliente: {save_err}", "WARNING")
                         failure_count += 1

@@ -653,6 +653,71 @@ def parar_automacao():
     else:
         return jsonify({"status": "error", "message": "Nenhuma automação em execução no momento."}), 400
 
+import threading
+
+@app.route("/api/webhook/whatsapp", methods=["POST"])
+def webhook_whatsapp():
+    dados = request.json or {}
+    
+    # Processar de forma assíncrona para retornar 200 OK imediatamente para a Z-API (evita reenvios por timeout)
+    def async_process():
+        try:
+            import agente_escavador
+            config = load_config()
+            rodando = processo_automacao is not None and processo_automacao.poll() is None
+            
+            def iniciar_callback(forcar_todos=False):
+                global processo_automacao
+                if processo_automacao and processo_automacao.poll() is None:
+                    return False
+                cmd = [sys.executable, "executar.py"]
+                if forcar_todos:
+                    cmd.append("--forcar-todos")
+                    
+                startupinfo = None
+                if os.name == 'nt':
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = 1
+                    
+                processo_automacao = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    cwd=os.getcwd(),
+                    startupinfo=startupinfo
+                )
+                return True
+                
+            def parar_callback():
+                global processo_automacao
+                if processo_automacao and processo_automacao.poll() is None:
+                    try:
+                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_automacao.pid)], capture_output=True)
+                        processo_automacao = None
+                        return True
+                    except Exception:
+                        try:
+                            processo_automacao.terminate()
+                            processo_automacao = None
+                            return True
+                        except Exception:
+                            pass
+                return False
+                
+            agente_escavador.processar_mensagem_recebida(
+                dados,
+                config,
+                rodando,
+                iniciar_callback,
+                parar_callback
+            )
+        except Exception as e:
+            print(f"Erro no processamento assíncrono do webhook: {e}")
+            
+    threading.Thread(target=async_process, daemon=True).start()
+    return jsonify({"status": "received"}), 200
+
 @app.route("/api/executar/status", methods=["GET"])
 def obter_status():
     global processo_automacao
@@ -909,6 +974,14 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Não foi possível abrir o navegador automaticamente: {e}")
             
+    # Iniciar o túnel SSH e o registro de webhook na Z-API (executado apenas uma vez no processo ativo)
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
+        try:
+            import tunnel_manager
+            tunnel_manager.start()
+        except Exception as e:
+            print(f"Erro ao iniciar o túnel de webhook: {e}")
+
     # Iniciar servidor local
     print("Iniciando Painel Web local na porta 5000...")
     app.run(host="127.0.0.1", port=5000, debug=True)
