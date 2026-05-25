@@ -124,6 +124,42 @@ def serve_service_worker():
 def encerrar_servidor():
     import signal
     print("Comando de encerramento recebido. Desligando o servidor Flask local...")
+    
+    # 1. Interromper a automação se estiver rodando para não deixar navegadores abertos
+    try:
+        global processo_automacao
+        if processo_automacao and processo_automacao.poll() is None:
+            print("Encerrando processo de automação ativo...")
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_automacao.pid)], capture_output=True)
+    except Exception as e:
+        print(f"Erro ao parar a automação no encerramento: {e}")
+        
+    # 2. Chamar parada explícita do gateway Node para não deixá-lo órfão
+    try:
+        parar_gateway_whatsapp()
+    except Exception as e:
+        print(f"Erro ao parar gateway do WhatsApp no encerramento: {e}")
+        
+    # 3. Chamar parada explícita do gerenciador de túneis SSH
+    try:
+        import tunnel_manager
+        tunnel_manager.stop()
+    except Exception as e:
+        print(f"Erro ao parar o gerenciador de túneis no encerramento: {e}")
+        
+    # 4. Tentar matar o processo pai (reloader) para evitar que ele reinicie o Flask
+    try:
+        ppid = os.getppid()
+        if ppid and ppid > 0:
+            print(f"Desligando o processo pai (reloader) com PID {ppid}...")
+            if os.name == 'nt':
+                subprocess.run(f"taskkill /F /PID {ppid}", shell=True, capture_output=True)
+            else:
+                os.kill(ppid, signal.SIGTERM)
+    except Exception as e:
+        print(f"Erro ao encerrar processo pai (reloader): {e}")
+        
+    # 5. Finalizar o próprio processo
     try:
         os.kill(os.getpid(), signal.SIGTERM)
         return jsonify({"status": "success", "message": "Servidor encerrando..."})
@@ -952,10 +988,35 @@ def baixar_relatorio(caminho_completo):
     return jsonify({"status": "error", "message": "Caminho de download inválido."}), 400
 
 # Funções de Gerenciamento do Sub-serviço Node do WhatsApp
+def liberar_porta_3000():
+    try:
+        import subprocess
+        # Comando para encontrar PIDs escutando na porta 3000 no Windows
+        cmd_find = "netstat -ano | findstr :3000"
+        output = subprocess.check_output(cmd_find, shell=True).decode('utf-8', errors='ignore')
+        pids = set()
+        for line in output.strip().split('\n'):
+            parts = line.strip().split()
+            if len(parts) >= 5:
+                pid = parts[-1]
+                if pid.isdigit() and int(pid) > 0:
+                    pids.add(int(pid))
+        
+        for pid in pids:
+            print(f"Liberando porta 3000: Terminando processo com PID {pid}...")
+            # Usar taskkill no Windows de forma silenciosa e forçada (/F /T)
+            subprocess.run(f"taskkill /F /T /PID {pid}", shell=True, capture_output=True)
+    except Exception:
+        # Ignora se não houver processos na porta 3000 ou se o comando falhar
+        pass
+
 def iniciar_gateway_whatsapp():
     global processo_gateway
     if processo_gateway and processo_gateway.poll() is None:
         return
+        
+    # Liberar a porta 3000 para evitar conflitos de processos órfãos
+    liberar_porta_3000()
         
     print("Iniciando sub-serviço Node.js do WhatsApp Gateway...")
     cmd = ["node", os.path.join("whatsapp_gateway", "gateway.js")]

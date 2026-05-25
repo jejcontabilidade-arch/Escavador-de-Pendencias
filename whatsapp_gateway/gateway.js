@@ -9,6 +9,17 @@ const bodyParser = require('body-parser');
 const app = express();
 app.use(bodyParser.json({ limit: '50mb' }));
 
+// Captura de exceções globais para evitar que o processo Node caia abruptamente
+process.on('unhandledRejection', (reason, promise) => {
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    console.error(`[${timestamp}] [FATAL_REJECTION] Unhandled Rejection em:`, promise, `motivo:`, reason);
+});
+
+process.on('uncaughtException', (error) => {
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    console.error(`[${timestamp}] [FATAL_EXCEPTION] Uncaught Exception: ${error.message}\nStack: ${error.stack}`);
+});
+
 const PORT = 3000;
 const SESSION_PATH = path.join(__dirname, '..', 'temp', 'session-wwebjs_session');
 const CONFIG_PATH = path.join(__dirname, '..', 'config_private.json');
@@ -39,6 +50,52 @@ function loadAuthorizedNumber() {
     }
 }
 
+// Resolver JID (ID interno do WhatsApp) a partir de um número de telefone
+async function resolveJid(to) {
+    if (!client) return `${to}@c.us`;
+    
+    // Limpar o número de destino
+    let cleanTo = to.replace(/\D/g, '');
+    
+    // Se já termina com @c.us, @g.us ou @lid, retornar como está
+    if (to.endsWith('@c.us') || to.endsWith('@g.us') || to.endsWith('@lid')) {
+        return to;
+    }
+    
+    // Adicionar código do país (Brasil) se parecer estar faltando (DDDs brasileiros têm 2 dígitos)
+    if (cleanTo.length === 10 || cleanTo.length === 11) {
+        cleanTo = '55' + cleanTo;
+    }
+    
+    try {
+        log(`Resolvendo JID para o número: ${cleanTo}...`);
+        
+        // Tenta obter o ID registrado no WhatsApp
+        let jid = await client.getNumberId(cleanTo);
+        
+        // Se for brasileiro (começa com 55) e tem o 9º dígito (13 dígitos no total, ex: 5561986221356)
+        // O WhatsApp pode ter cadastrado com ou sem o 9º dígito. Vamos tentar ambos!
+        if (!jid && cleanTo.startsWith('55') && cleanTo.length === 13) {
+            const ddd = cleanTo.slice(2, 4);
+            const rest = cleanTo.slice(5);
+            const withoutNine = `55${ddd}${rest}`;
+            log(`JID não encontrado com 9 dígitos. Tentando sem o 9º dígito: ${withoutNine}...`);
+            jid = await client.getNumberId(withoutNine);
+        }
+        
+        if (jid && jid._serialized) {
+            log(`JID resolvido com sucesso: ${jid._serialized}`);
+            return jid._serialized;
+        }
+        
+        log(`Aviso: getNumberId falhou para ${cleanTo}. Usando formato fallback @c.us`, 'WARNING');
+        return `${cleanTo}@c.us`;
+    } catch (err) {
+        log(`Erro ao resolver JID para ${cleanTo}: ${err.message}. Usando fallback @c.us`, 'ERROR');
+        return `${cleanTo}@c.us`;
+    }
+}
+
 // Limpar pasta de sessão antiga para forçar logout completo
 function clearSessionFolder() {
     try {
@@ -50,34 +107,79 @@ function clearSessionFolder() {
         log(`Erro ao apagar diretório de sessão: ${err.message}`, 'WARNING');
     }
 }
+let isInitializing = false;
+let retryTimeout = null;
+let debugScreenshotInterval = null;
 
-// Inicializar o cliente WhatsApp Web
-function initWhatsAppClient() {
+// Inicializar o cliente WhatsApp Web de forma segura e assíncrona
+async function initWhatsAppClient() {
+    if (isInitializing) {
+        log('Uma tentativa de inicialização já está em andamento. Ignorando...', 'INFO');
+        return;
+    }
+
+    isInitializing = true;
     log('Inicializando cliente WhatsApp Web...', 'INFO');
     currentStatus = 'authenticating';
     latestQr = null;
+
+    if (retryTimeout) {
+        clearTimeout(retryTimeout);
+        retryTimeout = null;
+    }
+
+    if (debugScreenshotInterval) {
+        clearInterval(debugScreenshotInterval);
+        debugScreenshotInterval = null;
+    }
+
+    if (client) {
+        try {
+            log('Destruindo instância anterior do cliente...');
+            await client.destroy();
+        } catch (e) {
+            log(`Erro ao destruir cliente anterior: ${e.message}`, 'WARNING');
+        }
+        client = null;
+    }
 
     client = new Client({
         authStrategy: new LocalAuth({
             dataPath: path.join(__dirname, '..', 'temp'),
             clientId: 'wwebjs_session'
         }),
-        webVersionCache: {
-            type: 'remote',
-            remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html',
-            strict: false
-        },
         puppeteer: {
             headless: true,
+            protocolTimeout: 180000, // Aumentado para 3 minutos para evitar timeout de protocolo
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
                 '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
             ]
         }
     });
+
+    // Iniciar captura periódica de tela para depuração (a cada 15 segundos)
+    debugScreenshotInterval = setInterval(async () => {
+        if (client && client.pupPage) {
+            try {
+                const logsDir = path.join(__dirname, '..', 'logs');
+                if (!fs.existsSync(logsDir)) {
+                    fs.mkdirSync(logsDir, { recursive: true });
+                }
+                const screenshotPath = path.join(logsDir, 'whatsapp_debug.png');
+                await client.pupPage.screenshot({ path: screenshotPath });
+                log(`Print da tela do WhatsApp salvo para depuração em: ${screenshotPath}`, 'DEBUG');
+            } catch (err) {
+                log(`Não foi possível tirar print da tela do WhatsApp: ${err.message}`, 'DEBUG_ERROR');
+            }
+        }
+    }, 15000);
 
     client.on('qr', (qr) => {
         log('Novo QR Code gerado pelo WhatsApp Web.', 'QR');
@@ -93,27 +195,46 @@ function initWhatsAppClient() {
         log(`Falha na autenticação do WhatsApp Web: ${msg}`, 'ERROR');
         currentStatus = 'disconnected';
         latestQr = null;
+        if (debugScreenshotInterval) {
+            clearInterval(debugScreenshotInterval);
+            debugScreenshotInterval = null;
+        }
     });
 
     client.on('ready', () => {
         log('O cliente do WhatsApp Web está PRONTO para enviar/receber mensagens!', 'SUCCESS');
         currentStatus = 'connected';
         latestQr = null;
+        isInitializing = false;
+        
+        // Limpar o print de depuração pois já conectou com sucesso
+        if (debugScreenshotInterval) {
+            clearInterval(debugScreenshotInterval);
+            debugScreenshotInterval = null;
+        }
     });
 
     client.on('disconnected', (reason) => {
         log(`Desconectado do WhatsApp: ${reason}`, 'WARNING');
         currentStatus = 'disconnected';
         latestQr = null;
+        isInitializing = false;
         
-        // Destrói o cliente e limpa a sessão para poder receber um novo QR Code
-        try {
-            client.destroy();
-        } catch (e) {}
+        if (debugScreenshotInterval) {
+            clearInterval(debugScreenshotInterval);
+            debugScreenshotInterval = null;
+        }
+        
         clearSessionFolder();
         
-        // Reinicializa em 5 segundos
-        setTimeout(initWhatsAppClient, 5000);
+        // Agendar reinicialização se não houver outra agendada
+        if (!retryTimeout) {
+            log('Agendando reinicialização em 5 segundos...', 'INFO');
+            retryTimeout = setTimeout(() => {
+                retryTimeout = null;
+                initWhatsAppClient();
+            }, 5000);
+        }
     });
 
     // Evento de recepção de mensagens
@@ -128,7 +249,20 @@ function initWhatsAppClient() {
             return;
         }
 
-        const senderClean = msg.from.replace(/\D/g, '');
+        let senderPhoneNumber = '';
+        try {
+            const contact = await msg.getContact();
+            senderPhoneNumber = contact.number || '';
+        } catch (err) {
+            log(`Erro ao obter contato para verificar número: ${err.message}`, 'WARNING');
+        }
+
+        // Fallback para msg.from se contact.number não estiver disponível
+        if (!senderPhoneNumber) {
+            senderPhoneNumber = msg.from.split('@')[0];
+        }
+
+        const senderClean = senderPhoneNumber.replace(/\D/g, '');
         const authClean = authorizedNumber.replace(/\D/g, '');
 
         let isAuthorized = (senderClean === authClean) || senderClean.endsWith(authClean) || authClean.endsWith(senderClean);
@@ -137,11 +271,11 @@ function initWhatsAppClient() {
         }
 
         if (isAuthorized) {
-            log('Mensagem vinda de número autorizado. Repassando para o webhook Flask...', 'INFO');
+            log(`Mensagem vinda de número autorizado (${senderClean}). Repassando para o webhook Flask...`, 'INFO');
             
             // Monta o payload no formato esperado por agente_escavador.py (Z-API Mock)
             const webhookPayload = {
-                phone: msg.from,
+                phone: senderClean,
                 text: {
                     message: msg.body
                 }
@@ -159,10 +293,28 @@ function initWhatsAppClient() {
     });
 
     try {
-        client.initialize();
+        log('Chamando client.initialize()...', 'INFO');
+        await client.initialize();
     } catch (err) {
-        log(`Erro ao inicializar cliente: ${err.message}`, 'ERROR');
+        log(`Erro assíncrono capturado no client.initialize(): ${err.message || err}`, 'ERROR');
         currentStatus = 'disconnected';
+        latestQr = null;
+        isInitializing = false;
+        
+        if (debugScreenshotInterval) {
+            clearInterval(debugScreenshotInterval);
+            debugScreenshotInterval = null;
+        }
+        
+        clearSessionFolder();
+        
+        if (!retryTimeout) {
+            log('Agendando reinicialização em 5 segundos devido a erro...', 'INFO');
+            retryTimeout = setTimeout(() => {
+                retryTimeout = null;
+                initWhatsAppClient();
+            }, 5000);
+        }
     }
 }
 
@@ -199,19 +351,13 @@ app.post('/api/send-message', async (req, res) => {
         return res.status(400).json({ error: 'Parâmetros "to" e "message" são obrigatórios' });
     }
 
-    // Limpar o número de destino e formatar para o padrão do WhatsApp Web (@c.us)
-    let cleanTo = to.replace(/\D/g, '');
-    if (!cleanTo.endsWith('@c.us') && !cleanTo.endsWith('@g.us')) {
-        // WhatsApp Web exige o formato correto. Para números brasileiros de celular antigos:
-        cleanTo = `${cleanTo}@c.us`;
-    }
-
     try {
-        log(`Enviando mensagem de texto para ${cleanTo}...`);
-        const sentMsg = await client.sendMessage(cleanTo, message);
+        const resolvedTo = await resolveJid(to);
+        log(`Enviando mensagem de texto para ${resolvedTo}...`);
+        const sentMsg = await client.sendMessage(resolvedTo, message);
         res.json({ success: true, messageId: sentMsg.id.id });
     } catch (err) {
-        log(`Erro ao enviar mensagem: ${err.message}`, 'ERROR');
+        log(`Erro ao enviar mensagem para ${to}: ${err.message}`, 'ERROR');
         res.status(500).json({ error: `Erro ao enviar mensagem: ${err.message}` });
     }
 });
@@ -227,27 +373,21 @@ app.post('/api/send-document', async (req, res) => {
         return res.status(400).json({ error: 'Parâmetros "to", "fileName" e "document" (base64) são obrigatórios' });
     }
 
-    // Limpar o número de destino
-    let cleanTo = to.replace(/\D/g, '');
-    if (!cleanTo.endsWith('@c.us') && !cleanTo.endsWith('@g.us')) {
-        cleanTo = `${cleanTo}@c.us`;
-    }
-
     try {
-        log(`Enviando documento "${fileName}" para ${cleanTo}...`);
+        const resolvedTo = await resolveJid(to);
+        log(`Enviando documento "${fileName}" para ${resolvedTo}...`);
         
         // Decodificar base64 e mimetype do payload
-        // Formato esperado: "data:application/pdf;base64,JVBERi0xLjQK..."
         const parts = document.split(';base64,');
         const mimetype = parts[0].replace('data:', '');
         const base64Data = parts[1];
 
         const media = new MessageMedia(mimetype, base64Data, fileName);
-        const sentMsg = await client.sendMessage(cleanTo, media);
+        const sentMsg = await client.sendMessage(resolvedTo, media);
         
         res.json({ success: true, messageId: sentMsg.id.id });
     } catch (err) {
-        log(`Erro ao enviar documento: ${err.message}`, 'ERROR');
+        log(`Erro ao enviar documento para ${to}: ${err.message}`, 'ERROR');
         res.status(500).json({ error: `Erro ao enviar documento: ${err.message}` });
     }
 });
