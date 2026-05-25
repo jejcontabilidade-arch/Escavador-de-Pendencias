@@ -101,7 +101,7 @@ def tunnel_worker():
             "ssh",
             "-o", "StrictHostKeyChecking=no",
             "-o", "ServerAliveInterval=30",
-            "-R", "80:localhost:5000",
+            "-R", "80:127.0.0.1:5000",
             "nokey@localhost.run"
         ]
         
@@ -122,6 +122,11 @@ def tunnel_worker():
             for line in iter(ssh_process.stdout.readline, ''):
                 if not running:
                     break
+                
+                # Logar a linha do SSH para depuração
+                line_clean = line.strip()
+                if line_clean:
+                    log(f"SSH: {line_clean}", "SSH_DEBUG")
                     
                 # Procurar padrão de URL HTTPS lhr.life
                 match = re.search(r"(https://[a-zA-Z0-9.-]+\.lhr\.life)", line)
