@@ -339,6 +339,18 @@
             background-color: #43c907;
         }
 
+        .btn-warning {
+            background-color: #ffb703;
+            color: #121212;
+            box-shadow: 0 4px 15px rgba(255, 183, 3, 0.3);
+        }
+
+        .btn-warning:hover {
+            background-color: #fb8500;
+            color: #121212;
+            transform: translateY(-1px);
+        }
+
         /* Progress Bar */
         .progress-container {
             width: 100%;
@@ -531,6 +543,7 @@
         .badge-success { background-color: rgba(56, 176, 0, 0.15); color: #38b000; border: 1px solid rgba(56, 176, 0, 0.3); }
         .badge-danger { background-color: rgba(217, 4, 41, 0.15); color: #d90429; border: 1px solid rgba(217, 4, 41, 0.3); }
         .badge-warning { background-color: rgba(255, 183, 3, 0.15); color: #ffb703; border: 1px solid rgba(255, 183, 3, 0.3); }
+        .badge-info { background-color: rgba(58, 134, 200, 0.15); color: #3a86c8; border: 1px solid rgba(58, 134, 200, 0.3); }
 
         /* Configuration Forms Grid */
         .form-grid {
@@ -849,11 +862,15 @@
                         <p id="lbl-detalhes-progresso" style="color: var(--text-muted); font-size: 0.85rem;">Nenhum processo ativo no momento.</p>
                     </div>
                     <div class="action-btns">
-                        <button class="btn btn-primary" id="btn-iniciar" onclick="iniciarAutomacao(false)">
+                        <button class="btn btn-primary" id="btn-iniciar" onclick="iniciarAutomacao(false, false)">
                             <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
                             Iniciar Varredura
                         </button>
-                        <button class="btn btn-secondary" id="btn-iniciar-login" onclick="iniciarAutomacao(true)" title="Forçar abertura do navegador para login inicial manual caso o token tenha expirado">
+                        <button class="btn btn-warning" id="btn-iniciar-todos" onclick="iniciarAutomacao(false, true)" title="Forçar escavação completa de todos os clientes do zero, limpando históricos anteriores e relatórios obsoletos">
+                            <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24"><path fill="currentColor" d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4c-4.42 0-8 3.58-8 8H1l4 4 4-4H6z"/></svg>
+                            Escavar Todos do Início
+                        </button>
+                        <button class="btn btn-secondary" id="btn-iniciar-login" onclick="iniciarAutomacao(true, false)" title="Forçar abertura do navegador para login inicial manual caso o token tenha expirado">
                             Forçar Login Manual
                         </button>
                         <button class="btn btn-danger" id="btn-parar" onclick="pararAutomacao()" style="display: none;">
@@ -1199,6 +1216,7 @@
                 const dot = document.getElementById('status-dot');
                 const txt = document.getElementById('txt-status-robo');
                 const btnIniciar = document.getElementById('btn-iniciar');
+                const btnIniciarTodos = document.getElementById('btn-iniciar-todos');
                 const btnIniciarLogin = document.getElementById('btn-iniciar-login');
                 const btnParar = document.getElementById('btn-parar');
 
@@ -1206,12 +1224,14 @@
                     dot.classList.add('active');
                     txt.innerText = 'Executando Varredura';
                     btnIniciar.style.display = 'none';
+                    if (btnIniciarTodos) btnIniciarTodos.style.display = 'none';
                     btnIniciarLogin.style.display = 'none';
                     btnParar.style.display = 'inline-flex';
                 } else {
                     dot.classList.remove('active');
                     txt.innerText = 'Inativo';
                     btnIniciar.style.display = 'inline-flex';
+                    if (btnIniciarTodos) btnIniciarTodos.style.display = 'inline-flex';
                     btnIniciarLogin.style.display = 'inline-flex';
                     btnParar.style.display = 'none';
                 }
@@ -1283,13 +1303,13 @@
             }
         }
 
-        async function iniciarAutomacao(forcarLogin = false) {
+        async function iniciarAutomacao(forcarLogin = false, forcarTodos = false) {
             try {
                 showToast("Iniciando rotina de automação no servidor...", "warning");
                 const response = await fetch('/api/executar/iniciar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ forcar_login: forcarLogin })
+                    body: JSON.stringify({ forcar_login: forcarLogin, forcar_todos: forcarTodos })
                 });
                 const res = await response.json();
                 if (response.ok) {
@@ -1645,9 +1665,10 @@
                 // Tipo badge
                 let badgeClass = 'badge-success';
                 let docType = 'PDF';
-                if (arq.nome.includes('erro_')) { badgeClass = 'badge-danger'; docType = 'ERRO'; }
+                if (arq.nome.includes('erro_') || arq.nome.toLowerCase().endsWith('.png')) { badgeClass = 'badge-danger'; docType = 'ERRO'; }
                 else if (arq.nome.toLowerCase().includes('cnd')) { badgeClass = 'badge-success'; docType = 'CND'; }
-                else if (arq.nome.toLowerCase().includes('pendencias')) { badgeClass = 'badge-warning'; docType = 'REL'; }
+                else if (arq.nome.toLowerCase().includes('pendencias') || arq.nome.toLowerCase().includes('relatorio')) { badgeClass = 'badge-warning'; docType = 'REL'; }
+                else if (arq.nome.toLowerCase().includes('alerta') || arq.nome.toLowerCase().endsWith('.txt')) { badgeClass = 'badge-info'; docType = 'MSG'; }
 
                 const cnpjExibir = arq.cnpj ? formatCnpj(arq.cnpj) : 'Sem CNPJ/CPF';
                 tr.innerHTML = `

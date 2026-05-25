@@ -1,5 +1,20 @@
 import os
 import sys
+
+# Redireciona stdout e stderr para arquivo de log caso o processo rode sem console ou em modo silencioso
+if os.environ.get("SILENT_MODE") == "1" or sys.stdout is None:
+    os.makedirs("logs", exist_ok=True)
+    try:
+        sys.stdout = open(os.path.join("logs", "flask_server.log"), "a", encoding="utf-8", buffering=1)
+    except Exception:
+        pass
+if os.environ.get("SILENT_MODE") == "1" or sys.stderr is None:
+    os.makedirs("logs", exist_ok=True)
+    try:
+        sys.stderr = open(os.path.join("logs", "flask_server.log"), "a", encoding="utf-8", buffering=1)
+    except Exception:
+        pass
+
 import json
 import csv
 import glob
@@ -591,10 +606,13 @@ def iniciar_automacao():
         
     dados = request.json or {}
     forcar_login = dados.get("forcar_login", False)
+    forcar_todos = dados.get("forcar_todos", False)
     
     cmd = [sys.executable, "executar.py"]
     if forcar_login:
         cmd.append("--login")
+    if forcar_todos:
+        cmd.append("--forcar-todos")
         
     try:
         # Iniciar o subprocesso de forma assíncrona, redirecionando saídas para evitar deadlock
@@ -659,9 +677,8 @@ def obter_status():
     # 2. Ler status.json do mês corrente nas pastas de relatórios e filtrar por hoje para estatísticas diárias
     relatorios_dir = config.get("relatorios_dir", "relatorios")
     if os.path.exists(relatorios_dir):
-        current_month = datetime.date.today().strftime("%Y-%m")
-        # Encontra todos os arquivos status.json na pasta do mês corrente
-        status_files = glob.glob(os.path.join(relatorios_dir, "*", current_month, "status.json"))
+        # Encontra todos os arquivos status.json diretamente na raiz da pasta de cada cliente
+        status_files = glob.glob(os.path.join(relatorios_dir, "*", "status.json"))
         for s_file in status_files:
             try:
                 with open(s_file, "r", encoding="utf-8") as f_status:
@@ -782,8 +799,8 @@ def listar_relatorios():
     if os.path.exists(relatorios_dir):
         for root, dirs, files in os.walk(relatorios_dir):
             for file in files:
-                # Ignorar status.json, screenshots e arquivos que não sejam PDF ou Excel
-                if file == "status.json" or file.endswith(".png") or file.endswith(".tmp"):
+                # Ignorar status.json, arquivos temporários
+                if file.endswith(".json") or file.endswith(".tmp"):
                     continue
                     
                 filepath = os.path.join(root, file)
@@ -801,7 +818,8 @@ def listar_relatorios():
                         continue
                         
                     empresa_raw = parts[0]
-                    data_pasta = parts[1] if len(parts) > 1 else "N/A"
+                    # data_pasta é gerada dinamicamente a partir do ano-mês de modificação física do arquivo (usando os.path.getmtime)
+                    data_pasta = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m")
                     
                     # Separar CNPJ e Nome da pasta no formato {cnpj}_{nome}
                     cnpj = ""
@@ -823,7 +841,7 @@ def listar_relatorios():
                         "data_mod": dt_mod,
                         "empresa": empresa,
                         "data_pasta": data_pasta,
-                        "tipo": "excel" if file.endswith(".xlsx") else "pdf" if file.endswith(".pdf") else "outro",
+                        "tipo": "excel" if file.endswith(".xlsx") else "pdf" if file.endswith(".pdf") else "imagem" if file.endswith(".png") else "texto" if file.endswith(".txt") else "outro",
                         "cnpj": cnpj
                     })
                 except Exception:

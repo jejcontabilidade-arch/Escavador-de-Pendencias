@@ -118,35 +118,42 @@ Durante as rodadas de calibragem sênior, superamos e blindamos o robô contra t
 
 ---
 
-##  Como Operar no Dia a Dia do Escritório
+## Como Operar no Dia a Dia do Escritório
 
-A operação cotidianizada foi projetada para ser a mais simples e segura possível:
+A operação cotidiana do sistema foi simplificada ao máximo e é realizada de forma 100% visual através do **Painel de Controle Web (PWA)**. Abaixo estão descritas as regras de funcionamento de cada botão de execução disponível na tela inicial:
 
-### 1. Atualizar a Lista de Clientes
+### 🎮 Painel de Controle e Botões de Execução
+
+* **🟢 Iniciar Varredura**:
+  * **O que faz:** Inicia a varredura comum do dia baseado nos CNPJs e CPFs ativos em `clientes.csv`.
+  * **Regra de Negócio (Varredura Inteligente):** Pula automaticamente os clientes que já possuem um arquivo `status.json` de **"Sucesso"** gerado no dia atual. Se houver falha na rodada, o robô tenta reprocessar respeitando o limite máximo de **1 tentativa de falha** por dia, evitando que clientes inativos ou fora do ar travem a automação.
+
+* **🟡 Escavar Todos do Início**:
+  * **O que faz:** Executa a varredura completa forçando a consulta global (passando a flag `--forcar-todos` para o robô).
+  * **Regra de Negócio (Substituição de Resultados):** Ignora qualquer histórico de execução do dia atual e consulta obrigatoriamente 100% dos clientes ativos da fila. Ele apaga fotos de erros antigos e relatórios de rodadas anteriores do cliente na pasta, deixando apenas a informação fresca extraída na rodada atual (mantendo a regra de **arquivo único por cliente**).
+
+* **🔵 Forçar Login Manual**:
+  * **O que faz:** Abre o navegador Google Chrome no modo visível na tela de login do e-CAC (`--login`).
+  * **Regra de Negócio (Renovação de Sessão):** Abre a página do Gov.br e aguarda o operador clicar para autenticar usando o certificado digital, colocar a senha de token/cartão de assinatura física e concluir a autenticação. Logo após o login, o robô captura a sessão, grava em `state.json` e inicia o processamento dos clientes automaticamente.
+  * *Use sempre que a automação relatar erros de "sessão expirada" ou falhar ao tentar reaproveitar os dados de login antigos.*
+
+* **🔴 Interromper Varredura**:
+  * **O que faz:** Executa um encerramento forçado da automação no sistema operacional Windows (`taskkill`).
+  * **Regra de Negócio (Parada Forçada):** Mata o processo principal do robô e força o fechamento de todas as instâncias de navegadores Chrome/Edge abertas pelo Playwright, liberando totalmente a memória RAM do computador.
+
+---
+
+### 📂 Inicialização do Painel de Controle
+1. Vá até a sua Área de Trabalho (Desktop) e dê um duplo clique no atalho **`Iniciar_Escavador_Silencioso.vbs`**.
+2. O servidor local será iniciado de forma silenciosa e a interface visual do painel se abrirá automaticamente no seu navegador.
+3. Se precisar baixar o Excel consolidado final ou visualizar as certidões e screenshots de erro, utilize as abas correspondentes no menu lateral esquerdo.
+
+### 📝 Atualizar a Lista de Clientes
 Sempre que novos clientes entrarem no escritório, abra o arquivo:
  [clientes.csv](file:///C:/Users/jejco/Desktop/Escavador%20de%20Pendencias/clientes.csv)
 E adicione as linhas no padrão:
 
 *[Bloco de código omitido para fluidez da leitura arquitetural]*
-
-
-### 2. Executar a Varredura Contábil Diária/Semanal
-Basta abrir o PowerShell ou Terminal na pasta do projeto e rodar:
-
-*[Bloco de código omitido para fluidez da leitura arquitetural]*
-
-O robô usará a sessão ativa salva no arquivo `state.json` para realizar toda a varredura em modo **Headless** (em segundo plano, super rápido!).
-
-### 3. Renovar ou Iniciar a Sessão do Certificado Digital
-O certificado digital da Receita tem sessões que expiram a cada poucas horas/dias. Se o arquivo `state.json` expirar ou se você precisar iniciar o robô pela primeira vez no dia:
-Rode o comando com a flag de login:
-
-*[Bloco de código omitido para fluidez da leitura arquitetural]*
-
-1. Um navegador Google Chrome real e visível se abrirá na tela do e-CAC.
-2. Clique no botão de login da sua conta Gov.br / Certificado Digital.
-3. Conclua o login normalmente.
-4. Assim que o e-CAC carregar a página inicial, o robô fechará o navegador automaticamente, salvará a sessão renovada em `state.json` e dará início imediato à varredura de toda a lista de clientes!
 
 ---
 

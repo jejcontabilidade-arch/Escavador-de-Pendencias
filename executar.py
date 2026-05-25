@@ -10,6 +10,9 @@ from playwright.sync_api import sync_playwright, TimeoutError
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
+class JapeException(Exception):
+    pass
+
 # Configuração de Logs
 def log(msg, level="INFO"):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -35,6 +38,33 @@ def log(msg, level="INFO"):
             f.write(f"[{timestamp}] [{level}] {msg_str}\n")
     except Exception:
         pass
+
+# Função preventiva para encerrar processos órfãos da automação e liberar arquivos de bloqueio
+def limpar_processos_automatizados_antigos():
+    log("Iniciando limpeza preventiva de processos órfãos da automação...", "SYSTEM")
+    import subprocess
+    # Encerra processos chrome e edge que tenham a nossa pasta de perfil temporária nos argumentos de linha de comando
+    cmd = (
+        'powershell -NoProfile -Command "'
+        'Get-CimInstance Win32_Process -Filter \\"Name = \'chrome.exe\' or Name = \'msedge.exe\' or Name = \'chromedriver.exe\' or Name = \'msedgedriver.exe\'\\" '
+        '| Where-Object { $_.CommandLine -like \'*chrome_profile_*\' } '
+        '| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
+    )
+    try:
+        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        log("Processos órfãos anteriores analisados e finalizados.", "SUCCESS")
+    except Exception as e:
+        log(f"Aviso ao limpar processos antigos via PowerShell: {e}", "WARNING")
+
+    # Deletar arquivos SingletonLock para destravar o Playwright
+    for folder in ["chrome_profile_chrome", "chrome_profile_msedge", "chrome_profile"]:
+        lock_path = os.path.join("temp", folder, "SingletonLock")
+        if os.path.exists(lock_path):
+            try:
+                os.remove(lock_path)
+                log(f"Arquivo de lock removido com sucesso: {lock_path}", "SUCCESS")
+            except Exception as e:
+                log(f"Aviso ao remover {lock_path} (pode já ter sido destravado): {e}", "WARNING")
 
 # Enviar o caractere inicial (se fornecido) e depois a tecla ENTER para o Windows
 def press_enter(first_char=None):
@@ -442,11 +472,10 @@ def load_clients(filepath):
 # Salvar status do processamento do cliente
 def save_client_status(relatorios_dir, cnpj, nome, status, details=""):
     today = datetime.date.today().strftime("%Y-%m-%d")
-    month = datetime.date.today().strftime("%Y-%m")
     # Limpar nome para criar pasta segura, mantendo letras acentuadas, cedilhas e espaços
     nome_limpo = "".join(c if c.isalnum() or c in " _-ÇçÁáÉéÍíÓóÚúÃãÕõÂâÊêÔôÀàÜü" else "_" for c in nome).strip()
     cnpj_limpo = "".join(filter(str.isdigit, cnpj))
-    client_dir = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}", month)
+    client_dir = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}")
     os.makedirs(client_dir, exist_ok=True)
     
     status_path = os.path.join(client_dir, "status.json")
@@ -495,35 +524,30 @@ def clean_filename(name):
 
 def remover_arquivos_fiscais_obsoletos(client_dir, arquivo_mantido_path=None):
     """
-    Remove todos os arquivos fiscais obsoletos na pasta do mês (client_dir),
-    como RelatorioSituacaoFiscal-*.pdf, CertidaoRegularidadeFiscal-*.pdf e Sem_Pendencias_Fiscais_Regular-*.txt,
-    deixando apenas o arquivo_mantido_path (se fornecido).
+    Remove todos os arquivos e subpastas na pasta do cliente (client_dir),
+    exceto o status.json e o arquivo_mantido_path (se fornecido).
     """
     try:
-        padroes = [
-            "RelatorioSituacaoFiscal-*.pdf",
-            "CertidaoRegularidadeFiscal-*.pdf",
-            "Sem_Pendencias_Fiscais_Regular-*.txt"
-        ]
-        import glob
-        arquivos_fiscais = []
-        for padrao in padroes:
-            arquivos_fiscais.extend(glob.glob(os.path.join(client_dir, padrao)))
-            
-        for arq in arquivos_fiscais:
-            arq_norm = os.path.normpath(arq)
-            if arquivo_mantido_path:
-                mantido_norm = os.path.normpath(arquivo_mantido_path)
-                if arq_norm == mantido_norm:
-                    continue
+        import shutil
+        if not os.path.exists(client_dir):
+            return
+        for item in os.listdir(client_dir):
+            item_path = os.path.join(client_dir, item)
+            if item.lower() == "status.json":
+                continue
+            if arquivo_mantido_path and os.path.normpath(item_path) == os.path.normpath(arquivo_mantido_path):
+                continue
             try:
-                if os.path.exists(arq_norm):
-                    os.remove(arq_norm)
-                    log(f"Removido arquivo fiscal obsoleto: {arq_norm}", "INFO")
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                    log(f"Removida subpasta antiga: {item_path}", "INFO")
+                else:
+                    os.remove(item_path)
+                    log(f"Removido arquivo obsoleto: {item_path}", "INFO")
             except Exception as e:
-                log(f"Não foi possível remover arquivo fiscal obsoleto {arq_norm}: {e}", "WARNING")
+                log(f"Não foi possível remover item obsoleto {item_path}: {e}", "WARNING")
     except Exception as e:
-        log(f"Erro ao remover arquivos fiscais obsoletos: {e}", "WARNING")
+        log(f"Erro ao remover arquivos obsoletos: {e}", "WARNING")
 
 def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
     log(f"Iniciando a geração do Painel Excel Consolidado: {output_path}", "INFO")
@@ -553,7 +577,7 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
                 
             nome_limpo = clean_filename(nome_raw)
             cnpj_limpo = "".join(filter(str.isdigit, cnpj_raw))
-            status_path = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}", month_str, "status.json")
+            status_path = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}", "status.json")
             
             status = "Pendente"
             detalhes = "Não Consultado"
@@ -592,8 +616,8 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
                     observacao = f"Erro ao ler status: {e}"
                     
             # Verifica se há alertas de Caixa Postal capturados para este cliente
-            alerta_file = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}", month_str, "ALERTA_CAIXA_POSTAL.txt")
-            alerta_json = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}", month_str, "ALERTA_CAIXA_POSTAL.json")
+            alerta_file = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}", "ALERTA_CAIXA_POSTAL.txt")
+            alerta_json = os.path.join(relatorios_dir, f"{cnpj_limpo}_{nome_limpo}", "ALERTA_CAIXA_POSTAL.json")
             alerta_texto = "-"
             
             if os.path.exists(alerta_json):
@@ -621,9 +645,30 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
                 "observacao": observacao
             })
             
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Painel de Controle e-CAC"
+        # Check if the Excel file exists on the Desktop and reuse it
+        if os.path.exists(output_path):
+            try:
+                log(f"Reutilizando arquivo Excel existente na Area de Trabalho: {output_path}", "INFO")
+                wb = openpyxl.load_workbook(output_path)
+                # Se a planilha "Painel de Controle e-CAC" ja existir, removemos ela para criá-la do zero
+                # garantindo que nao fiquem dados obsoletos do passado, mas preservando outras planilhas.
+                if "Painel de Controle e-CAC" in wb.sheetnames:
+                    idx = wb.sheetnames.index("Painel de Controle e-CAC")
+                    wb.remove(wb["Painel de Controle e-CAC"])
+                    ws = wb.create_sheet("Painel de Controle e-CAC", idx)
+                else:
+                    ws = wb.create_sheet("Painel de Controle e-CAC")
+            except Exception as load_err:
+                log(f"Aviso ao carregar Excel existente ({load_err}). Criando novo do zero.", "WARNING")
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "Painel de Controle e-CAC"
+        else:
+            log(f"Arquivo Excel nao encontrado. Criando novo consolidado: {output_path}", "INFO")
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Painel de Controle e-CAC"
+            
         ws.views.sheetView[0].showGridLines = True
         
         # Design system styles (Navy & Premium accents)
@@ -809,10 +854,28 @@ def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
         for col_letter, width in col_widths.items():
             ws.column_dimensions[col_letter].width = width
             
-        wb.save(output_path)
-        log(f"Painel Excel Consolidado gerado com sucesso: {output_path}", "SUCCESS")
+        # Try saving the workbook. If there's a PermissionError (e.g. file open in Excel), wait and retry.
+        saved = False
+        for attempt in range(4):
+            try:
+                wb.save(output_path)
+                saved = True
+                log(f"Painel Excel Consolidado salvo com sucesso: {output_path}", "SUCCESS")
+                break
+            except PermissionError:
+                if attempt < 3:
+                    log(f"O arquivo Excel '{output_path}' esta aberto ou bloqueado. Por favor, feche o Excel! Tentando novamente em 5 segundos (tentativa {attempt + 1}/4)...", "WARNING")
+                    time.sleep(5)
+                else:
+                    log(f"Nao foi possivel salvar o arquivo Excel '{output_path}' pois ele esta bloqueado. Por favor, feche o programa e tente novamente.", "ERROR")
+            except Exception as save_err:
+                log(f"Erro inesperado ao salvar o arquivo Excel consolidado: {save_err}", "ERROR")
+                break
+                
+        if not saved:
+            raise IOError(f"Nao foi possivel salvar a planilha Excel no caminho '{output_path}'. Verifique permissoes ou se o arquivo esta aberto.")
     except Exception as e:
-        log(f"Falha crítica ao gerar arquivo consolidado Excel: {e}", "ERROR")
+        log(f"Falha critica ao gerar arquivo consolidado Excel: {e}", "ERROR")
 
 def alterar_perfil(page, cnpj, procurador_cnpj):
     is_cpf = (len(cnpj) == 11)
@@ -1309,6 +1372,33 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
     
     carregado = False
     for _ in range(40): # 40 segundos no máximo
+        # Verificar se a tela de erro temporário JAPE (107.6) apareceu
+        try:
+            page_text = new_page.locator("body").inner_text()
+            if "Não foi possível concluir a ação para o contribuinte" in page_text or "107.6 -" in page_text:
+                log("[JAPE] Erro temporário do e-CAC (107.6) detectado para este contribuinte. Capturando screenshot e pulando...", "WARNING")
+                
+                # Capturar screenshot do erro na pasta do cliente
+                screenshot_path = os.path.join(client_dir, "erro_jape.png")
+                try:
+                    new_page.screenshot(path=screenshot_path)
+                    log(f"Screenshot do erro JAPE salvo em: {screenshot_path}", "INFO")
+                    remover_arquivos_fiscais_obsoletos(client_dir, screenshot_path)
+                except Exception as snap_err:
+                    log(f"Não foi possível capturar screenshot do erro JAPE: {snap_err}", "WARNING")
+                
+                # Fechar aba do relatório
+                try:
+                    new_page.close()
+                except Exception:
+                    pass
+                
+                raise JapeException("Não foi possível concluir a ação para o contribuinte (Erro 107.6 / JAPE)")
+        except JapeException:
+            raise
+        except Exception:
+            pass
+
         for sel in selectors:
             try:
                 if new_page.locator(sel).first.is_visible():
@@ -1427,57 +1517,60 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
             new_page.close()
             raise Exception(f"Falha ao realizar download do PDF do Relatório: {e}")
 
-def realizar_login_manual(config):
+    # Forçar a limpeza logo no início do login manual por segurança
+    limpar_processos_automatizados_antigos()
+
     log("=" * 60, "LOGIN")
     log(" INICIANDO MODO DE AUTENTICAÇÃO E-CAC (100% AUTOMATIZADO)", "LOGIN")
     log("=" * 60, "LOGIN")
-    log("Um navegador Google Chrome visível será aberto e tentará o login automaticamente...", "INFO")
+    
+    browser_choice = config.get("browser", "chrome").lower()
+    log(f"Navegador configurado para login manual: {browser_choice.upper()}", "INFO")
     
     state_file = "state.json"
     
     with sync_playwright() as p:
-        try:
-            log("Iniciando Chrome com perfil persistente e modo stealth...", "INFO")
+        context = None
+        
+        # Define os argumentos de inicialização
+        launch_args = {
+            "headless": False,
+            "args": [
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars"
+            ],
+            "no_viewport": True
+        }
+        
+        if browser_choice == "msedge":
+            user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_msedge")
+            launch_args["channel"] = "msedge"
+            browser_name_readable = "Microsoft Edge nativo"
+        elif browser_choice == "chrome":
             user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chrome")
-            os.makedirs(user_data_dir, exist_ok=True)
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                headless=False,
-                channel="chrome",
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-infobars"
-                ],
-                no_viewport=True
-            )
-        except Exception as e1:
-            log(f"Não foi possível iniciar o Chrome nativo ({e1}). Tentando Microsoft Edge nativo...", "WARNING")
+            launch_args["channel"] = "chrome"
+            browser_name_readable = "Google Chrome nativo"
+        else:
+            user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chromium")
+            browser_name_readable = "Chromium padrão"
+            
+        launch_args["user_data_dir"] = user_data_dir
+        os.makedirs(user_data_dir, exist_ok=True)
+        
+        # Tenta duas vezes (com limpeza preventiva entre elas se falhar)
+        for tentativa in range(1, 3):
             try:
-                user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_msedge")
-                os.makedirs(user_data_dir, exist_ok=True)
-                context = p.chromium.launch_persistent_context(
-                    user_data_dir=user_data_dir,
-                    headless=False,
-                    channel="msedge",
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--disable-infobars"
-                    ],
-                    no_viewport=True
-                )
-            except Exception as e2:
-                log(f"Não foi possível iniciar o Microsoft Edge nativo ({e2}). Usando Chromium padrão...", "WARNING")
-                user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chromium")
-                os.makedirs(user_data_dir, exist_ok=True)
-                context = p.chromium.launch_persistent_context(
-                    user_data_dir=user_data_dir,
-                    headless=False,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--disable-infobars"
-                    ],
-                    no_viewport=True
-                )
+                log(f"Iniciando {browser_name_readable} com perfil persistente e modo stealth (Tentativa {tentativa}/2)...", "INFO")
+                context = p.chromium.launch_persistent_context(**launch_args)
+                log(f"Navegador {browser_name_readable} iniciado com sucesso.", "SUCCESS")
+                break
+            except Exception as e:
+                log(f"Erro ao iniciar o {browser_name_readable} na tentativa {tentativa}: {e}", "WARNING")
+                if tentativa == 1:
+                    log("Executando limpeza de processos órfãos e arquivos de lock para tentar novamente...", "WARNING")
+                    limpar_processos_automatizados_antigos()
+                else:
+                    raise Exception(f"Falha persistente ao abrir o navegador {browser_name_readable} após duas tentativas. Verifique se o navegador está instalado ou aberto em outra tarefa: {e}")
             
         page = context.pages[0] if context.pages else context.new_page()
         
@@ -1603,25 +1696,14 @@ def enviar_whatsapp(mensagem, config):
         return False
 
 def atualizar_excel_dinamico(clientes, config):
-    hoje_limpo = datetime.date.today().strftime("%Y%m%d")
-    output_excel = os.path.join(
-        config.get("relatorios_dir", "relatorios"), 
-        f"Painel_Consolidado_Pendencias_eCAC_{hoje_limpo}.xlsx"
-    )
-    gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), output_excel)
-    
     try:
         desktop_dir = r"C:\Users\jejco\Desktop"
-        # 1. Arquivo de uso diário fixo (reutilizável)
         desktop_excel_fixed = os.path.join(desktop_dir, "Painel_Consolidado_Pendencias_eCAC.xlsx")
+        # Atualiza diretamente o arquivo fixo e único na Area de Trabalho, sem gerar cópias datadas.
         gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), desktop_excel_fixed)
         log(f"Painel Excel Consolidado principal atualizado no Desktop: {desktop_excel_fixed}", "SUCCESS")
-        
-        # 2. Cópia histórica com data
-        desktop_excel_dated = os.path.join(desktop_dir, f"Painel_Consolidado_Pendencias_eCAC_{hoje_limpo}.xlsx")
-        gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), desktop_excel_dated)
     except Exception as d_err:
-        log(f"Aviso: Não foi possível salvar cópia no Desktop: {d_err}", "WARNING")
+        log(f"Erro ao atualizar painel Excel no Desktop: {d_err}", "ERROR")
 
 def tentar_logout_ecac(page):
     if not page:
@@ -1646,6 +1728,7 @@ def tentar_logout_ecac(page):
         log(f"Aviso: Não foi possível clicar no botão de Sair (fechando diretamente): {e}", "WARNING")
 
 def main():
+    limpar_processos_automatizados_antigos()
     config = load_config()
     clientes = load_clients(config["clientes_file"])
     
@@ -1721,55 +1804,51 @@ def main():
                     time.sleep(60)
                     need_browser_restart = False
                 
-                log("Iniciando navegador com perfil persistente para executar a varredura automática...", "SYSTEM")
-                try:
+                # Executa a limpeza preventiva de processos no início da inicialização
+                limpar_processos_automatizados_antigos()
+                
+                browser_choice = config.get("browser", "chrome").lower()
+                log(f"Iniciando navegador com perfil persistente ({browser_choice.upper()}) para varredura automática...", "SYSTEM")
+                
+                # Define os argumentos de inicialização
+                launch_args = {
+                    "headless": config["headless"],
+                    "args": [
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-infobars"
+                    ],
+                    "no_viewport": True
+                }
+                
+                if browser_choice == "msedge":
+                    user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_msedge")
+                    launch_args["channel"] = "msedge"
+                    browser_name_readable = "Microsoft Edge nativo"
+                elif browser_choice == "chrome":
+                    user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chrome")
+                    launch_args["channel"] = "chrome"
+                    browser_name_readable = "Google Chrome nativo"
+                else:
+                    user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chromium")
+                    browser_name_readable = "Chromium padrão"
+                    
+                launch_args["user_data_dir"] = user_data_dir
+                os.makedirs(user_data_dir, exist_ok=True)
+                
+                # Tenta duas vezes (com limpeza preventiva entre elas se falhar)
+                for tentativa in range(1, 3):
                     try:
-                        ch_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chrome")
-                        os.makedirs(ch_dir, exist_ok=True)
-                        context = p.chromium.launch_persistent_context(
-                            user_data_dir=ch_dir,
-                            headless=config["headless"],
-                            channel="chrome",
-                            args=[
-                                "--disable-blink-features=AutomationControlled",
-                                "--disable-infobars"
-                            ],
-                            no_viewport=True
-                        )
-                        log("Navegador Google Chrome iniciado com sucesso.", "SUCCESS")
-                    except Exception as e1:
-                        log(f"Não foi possível iniciar o Chrome nativo ({e1}). Tentando Microsoft Edge nativo...", "WARNING")
-                        try:
-                            edge_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_msedge")
-                            os.makedirs(edge_dir, exist_ok=True)
-                            context = p.chromium.launch_persistent_context(
-                                user_data_dir=edge_dir,
-                                headless=config["headless"],
-                                channel="msedge",
-                                args=[
-                                    "--disable-blink-features=AutomationControlled",
-                                    "--disable-infobars"
-                                ],
-                                no_viewport=True
-                            )
-                            log("Navegador Microsoft Edge iniciado com sucesso.", "SUCCESS")
-                        except Exception as e2:
-                            log(f"Não foi possível iniciar o Microsoft Edge nativo ({e2}). Usando Chromium padrão...", "WARNING")
-                            chromium_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chromium")
-                            os.makedirs(chromium_dir, exist_ok=True)
-                            context = p.chromium.launch_persistent_context(
-                                user_data_dir=chromium_dir,
-                                headless=config["headless"],
-                                args=[
-                                    "--disable-blink-features=AutomationControlled",
-                                    "--disable-infobars"
-                                ],
-                                no_viewport=True
-                            )
-                            log("Navegador Chromium padrão iniciado com sucesso. AVISO: O diálogo de certificados do Windows pode não ser exibido corretamente no Chromium padrão.", "WARNING")
-                except Exception as e:
-                    log(f"Erro ao inicializar contexto do navegador: {e}", "ERROR")
-                    raise e
+                        log(f"Abrindo {browser_name_readable} (Tentativa {tentativa}/2)...", "INFO")
+                        context = p.chromium.launch_persistent_context(**launch_args)
+                        log(f"Navegador {browser_name_readable} iniciado com sucesso.", "SUCCESS")
+                        break
+                    except Exception as e:
+                        log(f"Erro ao iniciar o {browser_name_readable} na tentativa {tentativa}: {e}", "WARNING")
+                        if tentativa == 1:
+                            log("Executando limpeza de processos órfãos e arquivos de lock para tentar novamente...", "WARNING")
+                            limpar_processos_automatizados_antigos()
+                        else:
+                            raise Exception(f"Falha persistente ao abrir o navegador {browser_name_readable} após duas tentativas. Verifique se o navegador está instalado ou aberto em outra tarefa: {e}")
                 
                 # Injetar os cookies salvos em state.json no contexto antes de acessar a página
                 if os.path.exists(state_file):
@@ -1824,22 +1903,21 @@ def main():
                         skipped_count += 1
                         continue
                         
-                    # Verificar se o cliente já foi processado com sucesso hoje ou se já possui regularidade no mês
+                    # Verificar se o cliente já foi processado com sucesso hoje ou se já possui regularidade
                     today_str = datetime.date.today().strftime("%Y-%m-%d")
-                    month_str = datetime.date.today().strftime("%Y-%m")
                     nome_limpo = clean_filename(nome)
                     cnpj_limpo = "".join(filter(str.isdigit, cnpj))
-                    client_dir = os.path.join(config["relatorios_dir"], f"{cnpj_limpo}_{nome_limpo}", month_str)
+                    client_dir = os.path.join(config["relatorios_dir"], f"{cnpj_limpo}_{nome_limpo}")
                     status_path = os.path.join(client_dir, "status.json")
                     
                     forcar_todos = "--forcar-todos" in sys.argv
                     
-                    # 1. Verificar se já existem arquivos de regularidade (Certidão ou Informativo Regular) na pasta mensal
+                    # 1. Verificar se já existem arquivos de regularidade (Certidão ou Informativo Regular) na pasta do cliente
                     cnd_pdfs = glob.glob(os.path.join(client_dir, "CertidaoRegularidadeFiscal-*.pdf"))
                     cnd_txts = glob.glob(os.path.join(client_dir, "Sem_Pendencias_Fiscais_Regular-*.txt"))
                     
                     if not forcar_todos and (cnd_pdfs or cnd_txts):
-                        log(f"Cliente {nome} ({cnpj}) já possui Certidão/Regularidade ativa na pasta do mês ({month_str}). Pulando consulta no e-CAC.", "SUCCESS")
+                        log(f"Cliente {nome} ({cnpj}) já possui Certidão/Regularidade ativa na pasta do cliente. Pulando consulta no e-CAC.", "SUCCESS")
                         detalhes_status = "Certidão Baixada" if cnd_pdfs else "Sem Pendências (Informativo Gravado)"
                         save_client_status(config["relatorios_dir"], cnpj, nome, "Sucesso", detalhes_status)
                         success_count += 1
@@ -1865,49 +1943,40 @@ def main():
                         atualizar_excel_dinamico(clientes, config)
                         continue
                         
-                    # 2.5. Verificar se o cliente já falhou duas vezes hoje
-                    ja_falhou_duas_vezes_hoje = False
+                    # 2.5. Verificar se o cliente já falhou hoje
+                    ja_falhou_hoje = False
                     if not forcar_todos and os.path.exists(status_path):
                         try:
                             with open(status_path, "r", encoding="utf-8") as f:
                                 status_data = json.load(f)
                                 if status_data.get("data_consulta") == today_str:
-                                    if status_data.get("status") == "Erro" and status_data.get("contador_falhas_hoje", 0) >= 2:
-                                        ja_falhou_duas_vezes_hoje = True
+                                    if status_data.get("status") == "Erro" and status_data.get("contador_falhas_hoje", 0) >= 1:
+                                        ja_falhou_hoje = True
                         except Exception:
                             pass
                             
-                    if ja_falhou_duas_vezes_hoje:
-                        log(f"Cliente {nome} ({cnpj}) já falhou 2 vezes hoje. Pulando processamento para evitar travamento...", "WARNING")
+                    if ja_falhou_hoje:
+                        log(f"Cliente {nome} ({cnpj}) já falhou hoje. Pulando processamento para evitar travamento...", "WARNING")
                         failure_count += 1
                         # Atualiza a planilha de forma dinâmica
                         atualizar_excel_dinamico(clientes, config)
                         continue
                         
-                    # 3. Verificar se já existe relatório de pendência na pasta do mês
+                    # 3. Verificar se já existe relatório de pendência na pasta do cliente
                     relatorio_pdfs = glob.glob(os.path.join(client_dir, "RelatorioSituacaoFiscal-*.pdf"))
                     tem_relatorio_existente = len(relatorio_pdfs) > 0
                     
                     log(f"Processando Cliente: {nome} ({cnpj})...", "INFO")
                     if tem_relatorio_existente:
-                        log(f"Identificado relatório de pendências pré-existente na pasta do mês ({month_str}). Caso continue irregular, o download será pulado.", "INFO")
+                        log(f"Identificado relatório de pendências pré-existente na pasta do cliente. Caso continue irregular, o download será pulado.", "INFO")
                     
                     # Criar diretório para salvar o relatório do cliente (já inicializa como pendente)
                     client_dir = save_client_status(config["relatorios_dir"], cnpj, nome, "Pendente", "Iniciado")
                     
-                    # Remover imagens de erro antigas (.png) do cliente ativo na pasta do mês atual
-                    try:
-                        png_files = glob.glob(os.path.join(client_dir, "*.png"))
-                        for pf in png_files:
-                            try:
-                                os.remove(pf)
-                                log(f"Screenshot antiga removida antes de iniciar varredura: {pf}", "INFO")
-                            except Exception as rm_err:
-                                log(f"Não foi possível remover screenshot antiga: {rm_err}", "WARNING")
-                    except Exception as glob_err:
-                        log(f"Erro ao buscar screenshots antigas para remoção: {glob_err}", "WARNING")
+                    # Limpar todos os arquivos e pastas da execução anterior antes de iniciar varredura
+                    remover_arquivos_fiscais_obsoletos(client_dir)
                         
-                    max_tentativas = 2
+                    max_tentativas = 1
                     sucesso_cliente = False
                     erro_final = None
                     
@@ -1954,6 +2023,31 @@ def main():
                             success_count += 1
                             sucesso_cliente = True
                             break
+                        except JapeException as e:
+                            log(f"[ERRO JAPE] Erro temporário e-CAC (107.6) para {nome} ({cnpj}): {e}", "WARNING")
+                            erro_final = e
+                            
+                            # Fechar abas extras se acumularam
+                            try:
+                                if context and len(context.pages) > 1:
+                                    for p_extra in context.pages[1:]:
+                                        p_extra.close()
+                            except Exception:
+                                pass
+                                
+                            # Redirecionar página principal de volta para a Home do e-CAC
+                            try:
+                                log("Redirecionando a página principal de volta para a Home do e-CAC...", "INFO")
+                                page.goto(config["portal_url"], timeout=20000)
+                                page.wait_for_load_state("load")
+                                # Esperar até que o botão "Alterar perfil de acesso" esteja visível
+                                page.locator("text=Alterar perfil de acesso").first.wait_for(state="visible", timeout=10000)
+                                log("Página principal retornada com sucesso para a Home do e-CAC (botão Alterar perfil visível).", "SUCCESS")
+                            except Exception as nav_err:
+                                log(f"Aviso: Falha ao redirecionar para a Home após erro JAPE: {nav_err}. A automação tentará prosseguir.", "WARNING")
+
+                            sucesso_cliente = False
+                            break
                             
                         except Exception as e:
                             log(f"[ERRO - TENTATIVA {tentativa}/{max_tentativas}] Erro ao processar cliente {nome} ({cnpj}): {e}", "WARNING")
@@ -1986,6 +2080,7 @@ def main():
                                 screenshot_path = os.path.join(client_dir, f"erro_tentativa_{tentativa}.png")
                                 page.screenshot(path=screenshot_path)
                                 log(f"Screenshot do erro capturado e salvo em: {screenshot_path}", "INFO")
+                                remover_arquivos_fiscais_obsoletos(client_dir, screenshot_path)
                             except Exception as snap_err:
                                 log(f"Não foi possível capturar screenshot do erro: {snap_err}", "WARNING")
                                 
@@ -2096,7 +2191,6 @@ def main():
             detalhes_pendencias = []
             detalhes_erros = []
             today_str = datetime.date.today().strftime("%Y-%m-%d")
-            month_str = datetime.date.today().strftime("%Y-%m")
             
             for cliente in clientes:
                 cnpj = cliente["cnpj"]
@@ -2107,7 +2201,7 @@ def main():
                 
                 nome_limpo = clean_filename(nome)
                 cnpj_limpo = "".join(filter(str.isdigit, cnpj))
-                status_path = os.path.join(config["relatorios_dir"], f"{cnpj_limpo}_{nome_limpo}", month_str, "status.json")
+                status_path = os.path.join(config["relatorios_dir"], f"{cnpj_limpo}_{nome_limpo}", "status.json")
                 if os.path.exists(status_path):
                     with open(status_path, "r", encoding="utf-8") as f:
                         data = json.load(f)

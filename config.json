@@ -6,10 +6,5 @@
     "portal_url": "https://cav.receita.fazenda.gov.br/eCAC/Default.aspx#",
     "cert_first_char": "J",
     "download_timeout_ms": 60000,
-    "whatsapp_enabled": true,
-    "whatsapp_number": "",
-    "whatsapp_zapi_instance": "",
-    "whatsapp_zapi_token": "",
-    "whatsapp_zapi_client_token": "",
-    "openai_api_key": ""
+    "whatsapp_enabled": true
 }
