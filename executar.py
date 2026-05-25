@@ -1425,6 +1425,45 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
         
     # 4. Analisar se o cliente tem pendências ou se está regular
     page_text = new_page.locator("body").inner_text()
+    
+    # Se houver a mensagem amarela exigindo atualização da consulta, clicar em "Atualizar"
+    if "necessário gerar uma nova consulta" in page_text or "situação fiscal, acionando a opção" in page_text:
+        log("Alerta de consulta desatualizada detectado! Clicando em 'Atualizar'...", "WARNING")
+        try:
+            btn_atualizar = None
+            for selector in [
+                "button:has-text('Atualizar')",
+                "text=Atualizar",
+                "//button[contains(., 'Atualizar')]"
+            ]:
+                loc = new_page.locator(selector).first
+                if loc.is_visible(timeout=3000):
+                    btn_atualizar = loc
+                    break
+            
+            if btn_atualizar:
+                btn_atualizar.click()
+                log("Botão 'Atualizar' clicado com sucesso. Aguardando processamento da Receita...", "INFO")
+                new_page.wait_for_timeout(3000)
+                # Esperar até que o alerta amarelo desapareça (máximo 30 segundos)
+                for _ in range(30):
+                    banner_visivel = False
+                    try:
+                        banner_visivel = new_page.locator("text=gerar uma nova consulta").first.is_visible()
+                    except Exception:
+                        pass
+                    if not banner_visivel:
+                        log("Nova consulta de situação fiscal concluída com sucesso!", "SUCCESS")
+                        break
+                    new_page.wait_for_timeout(1000)
+                
+                # Atualizar o page_text com a nova situação
+                page_text = new_page.locator("body").inner_text()
+            else:
+                log("Aviso: Alerta de consulta desatualizada presente, mas botão 'Atualizar' não localizado.", "WARNING")
+        except Exception as e_act:
+            log(f"Erro ao tentar clicar no botão 'Atualizar': {e_act}", "WARNING")
+            
     hoje_limpo = datetime.date.today().strftime("%Y%m%d")
     
     # Verificação se o status é "Sem pendência"

@@ -11,11 +11,11 @@ def log(msg, level="AGENTE"):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] [{level}] {msg}")
 
-def enviar_mensagem_whatsapp(mensagem, config):
+def enviar_mensagem_whatsapp(mensagem, config, destinatario=None):
     if not config.get("whatsapp_enabled"):
         return False
         
-    number = config.get("whatsapp_number")
+    number = destinatario or config.get("whatsapp_number")
     if not number:
         log("Erro: Número de telefone do WhatsApp não configurado.", "ERROR")
         return False
@@ -33,11 +33,11 @@ def enviar_mensagem_whatsapp(mensagem, config):
         log(f"Erro ao enviar mensagem via gateway local: {e}", "ERROR")
         return False
 
-def enviar_documento_whatsapp(caminho_arquivo, nome_arquivo, config):
+def enviar_documento_whatsapp(caminho_arquivo, nome_arquivo, config, destinatario=None):
     if not config.get("whatsapp_enabled"):
         return False
         
-    number = config.get("whatsapp_number")
+    number = destinatario or config.get("whatsapp_number")
     if not number:
         return False
         
@@ -154,7 +154,7 @@ def listar_clientes_por_status(config, st_procurado):
         
     return f"🤖 *{titulo}*:\n" + "\n".join(clientes_list)
 
-def localizar_e_enviar_documento(nome_pesquisa, config):
+def localizar_e_enviar_documento(nome_pesquisa, config, destinatario=None):
     relatorios_dir = config.get("relatorios_dir", "relatorios")
     if not os.path.exists(relatorios_dir):
         return "Diretório de relatórios não encontrado."
@@ -209,7 +209,7 @@ def localizar_e_enviar_documento(nome_pesquisa, config):
     nome_final = os.path.basename(caminho_final)
     
     # Enviar documento
-    enviado = enviar_documento_whatsapp(caminho_final, nome_final, config)
+    enviado = enviar_documento_whatsapp(caminho_final, nome_final, config, destinatario)
     if enviado:
         return f"✅ Envei o documento '{nome_final}' para o seu chat!"
     else:
@@ -254,10 +254,56 @@ def adicionar_novo_cliente_csv(cnpj, nome, config):
         log(f"Erro ao adicionar cliente no CSV: {e}", "ERROR")
         return f"❌ Erro ao adicionar o cliente no arquivo do sistema: {e}"
 
-def interpretar_mensagem_com_gpt(texto_mensagem, config):
+def carregar_contatos_autorizados():
+    contatos = []
+    csv_path = "autorizados.csv"
+    if os.path.exists(csv_path):
+        try:
+            with open(csv_path, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    num = row.get("whatsapp_number", "").strip()
+                    nome = row.get("nome", "").strip()
+                    perm = row.get("permissao", "operador").strip().lower()
+                    if num:
+                        contatos.append({
+                            "whatsapp_number": "".join(filter(str.isdigit, num)),
+                            "nome": nome,
+                            "permissao": perm
+                        })
+        except Exception as e:
+            log(f"Erro ao ler autorizados.csv: {e}", "ERROR")
+    return contatos
+
+def verificar_permissao_numero(numero, config):
+    if not numero:
+        return None
+        
+    num_clean = "".join(filter(str.isdigit, numero))
+    contatos = carregar_contatos_autorizados()
+    
+    for c in contatos:
+        c_num = c["whatsapp_number"]
+        if (num_clean == c_num) or num_clean.endswith(c_num) or c_num.endswith(num_clean):
+            return c
+        if len(num_clean) >= 8 and len(c_num) >= 8:
+            if num_clean[-8:] == c_num[-8:]:
+                return c
+                
+    auth_number = config.get("whatsapp_number", "")
+    auth_clean = "".join(filter(str.isdigit, auth_number))
+    if auth_clean:
+        if (num_clean == auth_clean) or num_clean.endswith(auth_clean) or auth_clean.endswith(num_clean):
+            return {"whatsapp_number": auth_clean, "nome": "Willian Administrador", "permissao": "admin"}
+        if len(num_clean) >= 8 and len(auth_clean) >= 8:
+            if num_clean[-8:] == auth_clean[-8:]:
+                return {"whatsapp_number": auth_clean, "nome": "Willian Administrador", "permissao": "admin"}
+                
+    return None
+
+def interpretar_mensagem_com_gpt(texto_mensagem, config, usuario_nome="Usuário", usuario_role="operador"):
     openai_key = config.get("openai_api_key", "").strip()
     if not openai_key:
-        # Fallback se não tiver chave OpenAI
         log("OpenAI API Key não encontrada no config_private.json. Usando interpretador Heurístico.", "WARNING")
         return interpretar_mensagem_heuristica(texto_mensagem)
         
@@ -267,28 +313,28 @@ def interpretar_mensagem_com_gpt(texto_mensagem, config):
         "Authorization": f"Bearer {openai_key}"
     }
     
-    prompt = """Você é o Agente Escavador, o assistente virtual inteligente da J&J Contabilidade que controla o sistema de automação e-CAC.
-O usuário é o Willian, administrador do sistema.
+    prompt = f"""Você é o Agente Escavador, o assistente virtual inteligente da J&J Contabilidade que controla o sistema de automação e-CAC.
+O usuário atual que está interagindo com você é o '{usuario_nome}' com o papel de '{usuario_role}'.
 Sua tarefa é analisar a mensagem do usuário, deduzir sua intenção operacional e gerar uma resposta em linguagem natural que seja extremamente humana, amigável, natural e adequada ao contexto.
 
 As intenções suportadas são:
-1. "iniciar_varredura" (Iniciar varredura comum do dia, ignorando quem já deu sucesso)
-2. "iniciar_varredura_total" (Forçar escavação completa de todos os clientes do início)
-3. "interromper_varredura" (Interromper ou parar a execução ativa do robô)
-4. "obter_status" (Consultar status atual, progresso e logs do robô)
-5. "listar_clientes_ok" (Consultar lista de clientes com sucesso hoje)
-6. "listar_clientes_pendentes_erro" (Consultar lista de clientes com falhas ou pendentes hoje)
+1. "iniciar_varredura" (Iniciar varredura comum do dia, ignorando quem já deu sucesso. Restrito a administradores e operadores)
+2. "iniciar_varredura_total" (Forçar escavação completa de todos os clientes do início. Restrito a administradores)
+3. "interromper_varredura" (Interromper ou parar a execução ativa do robô. Restrito a administradores)
+4. "obter_status" (Consultar status atual, progresso e logs do robô. Permitido a todos)
+5. "listar_clientes_ok" (Consultar lista de clientes com sucesso hoje. Permitido a todos)
+6. "listar_clientes_pendentes_erro" (Consultar lista de clientes com falhas ou pendentes hoje. Permitido a todos)
 7. "baixar_documento" (Baixar ou obter a certidão/relatório de um cliente específico. Requer o parâmetro 'empresa')
-8. "adicionar_cliente" (Adicionar um novo cliente/empresa ao sistema. Requer o nome completo em 'empresa' e o CNPJ/CPF em 'cnpj')
-9. "conversa_casual" (Outro tipo de mensagem, dúvidas gerais sobre o sistema ou saudações)
+8. "adicionar_cliente" (Adicionar um novo cliente/empresa ao sistema. Requer o nome completo em 'empresa' e o CNPJ/CPF em 'cnpj'. Restrito a administradores e operadores)
+9. "conversa_casual" (Outro tipo de mensagem, saudações ou dúvidas gerais)
 
 Retorne estritamente um JSON no seguinte formato (sem formatação markdown ou blocos de código):
-{
+{{
   "intencao": "uma das intenções acima",
   "empresa": "nome ou cnpj da empresa se a intenção for baixar_documento, ou o nome completo se for adicionar_cliente, senão nulo",
   "cnpj": "o CNPJ ou CPF do cliente (apenas números) se a intenção for adicionar_cliente, senão nulo",
-  "resposta_humana": "uma resposta humana, amigável e profissional em português para o Willian, confirmando o que você vai fazer ou respondendo a dúvida dele de forma natural e empática"
-}
+  "resposta_humana": "uma resposta humana, amigável e profissional em português para o {usuario_nome}, confirmando o que você vai fazer ou respondendo de forma natural e empática"
+}}
 """
     
     payload = {
@@ -357,39 +403,34 @@ def interpretar_mensagem_heuristica(texto):
         }
 
 def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_callback, parar_callback):
-    # 1. Validar se o remetente é o número autorizado
-    # A Z-API envia o número no payload em 'phone'
     sender_phone = payload.get("phone", "")
+    if not sender_phone:
+        return False
+        
     sender_clean = "".join(filter(str.isdigit, sender_phone))
+    usuario = verificar_permissao_numero(sender_clean, config)
     
-    auth_number = config.get("whatsapp_number", "")
-    auth_clean = "".join(filter(str.isdigit, auth_number))
-    
-    if not auth_clean:
-        log("Alerta: Nenhum número autorizado cadastrado no config_private.json ('whatsapp_number').", "WARNING")
-        return False
-        
-    # Verificar se as strings batem, tolerando DDD, DDI e 9º dígito
-    is_authorized = (sender_clean == auth_clean) or sender_clean.endswith(auth_clean) or auth_clean.endswith(sender_clean)
-    if not is_authorized and len(sender_clean) >= 8 and len(auth_clean) >= 8:
-        is_authorized = (sender_clean[-8:] == auth_clean[-8:])
-        
-    if not is_authorized:
+    if not usuario:
         log(f"Mensagem recebida de número não autorizado ({sender_clean}). Ignorando por segurança.", "SECURITY")
+        enviar_mensagem_whatsapp(
+            "Olá! Sou o Agente Escavador da J&J Contabilidade. 🔒 Este canal de atendimento é privado para operadores e agentes autorizados da empresa. Se você faz parte da equipe, solicite seu cadastro ao administrador.",
+            config,
+            destinatario=sender_clean
+        )
         return False
         
-    # 2. Extrair texto da mensagem
-    # Z-API coloca o texto em text.message
+    usuario_nome = usuario["nome"]
+    usuario_role = usuario["permissao"]
+    
     message_obj = payload.get("text", {})
     texto_mensagem = message_obj.get("message", "").strip()
     
     if not texto_mensagem:
         return False
         
-    log(f"Mensagem recebida do usuário autorizado: '{texto_mensagem}'")
+    log(f"Mensagem recebida de {usuario_nome} ({usuario_role}): '{texto_mensagem}'")
     
-    # 3. Chamar interpretador NLP
-    res = interpretar_mensagem_com_gpt(texto_mensagem, config)
+    res = interpretar_mensagem_com_gpt(texto_mensagem, config, usuario_nome, usuario_role)
     intencao = res.get("intencao")
     empresa = res.get("empresa")
     cnpj = res.get("cnpj")
@@ -397,71 +438,92 @@ def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_cal
     
     log(f"Intenção detectada: '{intencao}' (Empresa: '{empresa}', CNPJ: '{cnpj}')")
     
-    # 4. Executar a Intenção
-    # Sempre enviar a resposta humana da IA primeiro se ela existir (para dar um tom natural e conversacional)
+    # Restrições de papel
+    restrito_admin = ["interromper_varredura", "iniciar_varredura_total"]
+    restrito_admin_operador = ["iniciar_varredura", "adicionar_cliente"]
+    
+    if usuario_role == "agente":
+        if intencao in restrito_admin or intencao in restrito_admin_operador:
+            enviar_mensagem_whatsapp(
+                f"🤖 Olá {usuario_nome}. Ação '{intencao}' recusada. Como um Agente de IA, você não possui permissão para comandar a infraestrutura da automação. Permissões limitadas a consultas.",
+                config,
+                destinatario=sender_clean
+            )
+            return False
+            
+    elif usuario_role == "operador":
+        if intencao in restrito_admin:
+            enviar_mensagem_whatsapp(
+                f"🤖 Desculpe, {usuario_nome}. Ação '{intencao}' recusada. Ações administrativas estão disponíveis apenas para o administrador.",
+                config,
+                destinatario=sender_clean
+            )
+            return False
+            
+    # Executar a Intenção
     if resposta_humana:
-        enviar_mensagem_whatsapp(resposta_humana, config)
+        enviar_mensagem_whatsapp(resposta_humana, config, destinatario=sender_clean)
         
     if intencao == "iniciar_varredura":
         if rodando_atualmente:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 O robô já está executando uma varredura no momento.", config)
+                enviar_mensagem_whatsapp("🤖 O robô já está executando uma varredura no momento.", config, destinatario=sender_clean)
         else:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura inteligente comum agora em segundo plano. Vou te notificar do andamento.", config)
+                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura inteligente comum agora em segundo plano. Vou te notificar do andamento.", config, destinatario=sender_clean)
             iniciar_callback(forcar_todos=False)
             
     elif intencao == "iniciar_varredura_total":
         if rodando_atualmente:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 O robô já está executando uma varredura. Interrompa a atual se quiser reiniciar do zero.", config)
+                enviar_mensagem_whatsapp("🤖 O robô já está executando uma varredura. Interrompa a atual se quiser reiniciar do zero.", config, destinatario=sender_clean)
         else:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura completa (forçando todos) agora em segundo plano. Isso pode levar mais tempo.", config)
+                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura completa (forçando todos) agora em segundo plano. Isso pode levar mais tempo.", config, destinatario=sender_clean)
             iniciar_callback(forcar_todos=True)
             
     elif intencao == "interromper_varredura":
         if not rodando_atualmente:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 Nenhuma varredura ativa para interromper no momento.", config)
+                enviar_mensagem_whatsapp("🤖 Nenhuma varredura ativa para interromper no momento.", config, destinatario=sender_clean)
         else:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🔴 *Parada Forçada:* Estou parando a automação e encerrando todos os navegadores abertos no servidor...", config)
+                enviar_mensagem_whatsapp("🔴 *Parada Forçada:* Estou parando a automação e encerrando todos os navegadores abertos no servidor...", config, destinatario=sender_clean)
             parar_callback()
-            enviar_mensagem_whatsapp("✅ Automação interrompida e limpa com sucesso!", config)
+            enviar_mensagem_whatsapp("✅ Automação interrompida e limpa com sucesso!", config, destinatario=sender_clean)
             
     elif intencao == "obter_status":
         resumo = obter_status_resumo(config, rodando_atualmente)
-        enviar_mensagem_whatsapp(resumo, config)
+        enviar_mensagem_whatsapp(resumo, config, destinatario=sender_clean)
         
     elif intencao == "listar_clientes_ok":
         lista = listar_clientes_por_status(config, "Sucesso")
-        enviar_mensagem_whatsapp(lista, config)
+        enviar_mensagem_whatsapp(lista, config, destinatario=sender_clean)
         
     elif intencao == "listar_clientes_pendentes_erro":
         lista = listar_clientes_por_status(config, "Erro")
-        enviar_mensagem_whatsapp(lista, config)
+        enviar_mensagem_whatsapp(lista, config, destinatario=sender_clean)
         
     elif intencao == "baixar_documento":
         if not empresa:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 Por favor, informe o nome do cliente. Exemplo: 'Me mande a certidão da Tome & Lopes'.", config)
+                enviar_mensagem_whatsapp("🤖 Por favor, informe o nome do cliente. Exemplo: 'Me mande a certidão da Tome & Lopes'.", config, destinatario=sender_clean)
         else:
             if not resposta_humana:
-                enviar_mensagem_whatsapp(f"🔍 Buscando arquivos fiscais de *{empresa}*...", config)
-            msg_resposta = localizar_e_enviar_documento(empresa, config)
-            enviar_mensagem_whatsapp(msg_resposta, config)
+                enviar_mensagem_whatsapp(f"🔍 Buscando arquivos fiscais de *{empresa}*...", config, destinatario=sender_clean)
+            msg_resposta = localizar_e_enviar_documento(empresa, config, destinatario=sender_clean)
+            enviar_mensagem_whatsapp(msg_resposta, config, destinatario=sender_clean)
             
     elif intencao == "adicionar_cliente":
         if not empresa or not cnpj:
-            msg_erro = "🤖 Willian, para cadastrar o novo cliente preciso do *Nome Completo* e também do *CNPJ ou CPF*. Pode me enviar novamente com essas informações?"
-            enviar_mensagem_whatsapp(msg_erro, config)
+            msg_erro = f"🤖 {usuario_nome}, para cadastrar o novo cliente preciso do *Nome Completo* e também do *CNPJ ou CPF*. Pode me enviar novamente com essas informações?"
+            enviar_mensagem_whatsapp(msg_erro, config, destinatario=sender_clean)
         else:
             resultado = adicionar_novo_cliente_csv(cnpj, empresa, config)
-            enviar_mensagem_whatsapp(resultado, config)
+            enviar_mensagem_whatsapp(resultado, config, destinatario=sender_clean)
             
     elif intencao == "conversa_casual":
         if not resposta_humana:
-            enviar_mensagem_whatsapp("🤖 Não consegui entender seu comando. Tente dizer 'iniciar varredura' ou 'status'.", config)
+            enviar_mensagem_whatsapp("🤖 Não consegui entender seu comando. Tente dizer 'iniciar varredura' ou 'status'.", config, destinatario=sender_clean)
             
     return True

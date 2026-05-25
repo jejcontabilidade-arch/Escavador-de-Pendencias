@@ -366,6 +366,110 @@ def delete_cliente(cnpj):
     except Exception as e:
         return jsonify({"status": "error", "message": f"Erro ao salvar CSV: {str(e)}"}), 500
 
+# Rotas de Gestão de Contatos/Agentes Autorizados do WhatsApp
+@app.route("/api/autorizados", methods=["GET"])
+def get_autorizados():
+    csv_path = "autorizados.csv"
+    contatos = []
+    if os.path.exists(csv_path):
+        try:
+            with open(csv_path, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    num = row.get("whatsapp_number", "").strip()
+                    nome = row.get("nome", "").strip()
+                    perm = row.get("permissao", "operador").strip()
+                    if num:
+                        contatos.append({"whatsapp_number": num, "nome": nome, "permissao": perm})
+        except Exception as e:
+            return jsonify({"status": "error", "message": f"Erro ao ler contatos autorizados: {str(e)}"}), 500
+    return jsonify(contatos)
+
+@app.route("/api/autorizados", methods=["POST"])
+def add_autorizados():
+    dados = request.json or {}
+    number = "".join(filter(str.isdigit, dados.get("whatsapp_number", "")))
+    nome = dados.get("nome", "").strip()
+    permissao = dados.get("permissao", "operador").strip().lower()
+    
+    if not number or len(number) < 8:
+        return jsonify({"status": "error", "message": "Número de WhatsApp inválido. Deve conter pelo menos 8 dígitos."}), 400
+    if not nome:
+        return jsonify({"status": "error", "message": "Nome do contato é obrigatório."}), 400
+    if permissao not in ["admin", "operador", "agente"]:
+        return jsonify({"status": "error", "message": "Permissão inválida. Deve ser admin, operador ou agente."}), 400
+        
+    csv_path = "autorizados.csv"
+    contatos = []
+    existe = False
+    
+    if os.path.exists(csv_path):
+        try:
+            with open(csv_path, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    num = "".join(filter(str.isdigit, row.get("whatsapp_number", "").strip()))
+                    n = row.get("nome", "").strip()
+                    p = row.get("permissao", "operador").strip().lower()
+                    if num == number:
+                        existe = True
+                        contatos.append({"whatsapp_number": number, "nome": nome, "permissao": permissao})
+                    else:
+                        contatos.append({"whatsapp_number": num, "nome": n, "permissao": p})
+        except Exception as e:
+            return jsonify({"status": "error", "message": f"Erro ao ler contatos autorizados: {str(e)}"}), 500
+            
+    if not existe:
+        contatos.append({"whatsapp_number": number, "nome": nome, "permissao": permissao})
+        
+    try:
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["whatsapp_number", "nome", "permissao"])
+            for c in contatos:
+                writer.writerow([c["whatsapp_number"], c["nome"], c["permissao"]])
+        return jsonify({"status": "success", "message": "Contato cadastrado/atualizado com sucesso!"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Erro ao salvar contatos no CSV: {str(e)}"}), 500
+
+@app.route("/api/autorizados/<number>", methods=["DELETE"])
+def delete_autorizado(number):
+    number = "".join(filter(str.isdigit, number))
+    if not number:
+        return jsonify({"status": "error", "message": "Número inválido."}), 400
+        
+    csv_path = "autorizados.csv"
+    contatos = []
+    encontrado = False
+    
+    if os.path.exists(csv_path):
+        try:
+            with open(csv_path, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    num = "".join(filter(str.isdigit, row.get("whatsapp_number", "").strip()))
+                    n = row.get("nome", "").strip()
+                    p = row.get("permissao", "operador").strip().lower()
+                    if num == number:
+                        encontrado = True
+                    else:
+                        contatos.append({"whatsapp_number": num, "nome": n, "permissao": p})
+        except Exception as e:
+            return jsonify({"status": "error", "message": f"Erro ao ler contatos autorizados: {str(e)}"}), 500
+            
+    if not encontrado:
+        return jsonify({"status": "error", "message": "Contato não encontrado."}), 404
+        
+    try:
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["whatsapp_number", "nome", "permissao"])
+            for c in contatos:
+                writer.writerow([c["whatsapp_number"], c["nome"], c["permissao"]])
+        return jsonify({"status": "success", "message": "Contato excluído com sucesso!"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Erro ao salvar CSV de contatos: {str(e)}"}), 500
+
 # Funções de extração inteligente
 def extrair_clientes_openai(text, api_key):
     url = "https://api.openai.com/v1/chat/completions"
@@ -1113,3 +1217,4 @@ if __name__ == "__main__":
     # Iniciar servidor local
     print("Iniciando Painel Web local na porta 5000...")
     app.run(host="127.0.0.1", port=5000, debug=True)
+# Recarrega o gateway e inicializa o node do whatsapp com suporte a LID cache

@@ -906,6 +906,14 @@
                     Instância WhatsApp
                 </button>
             </li>
+            <li class="nav-item" id="nav-autorizados">
+                <button onclick="switchTab('autorizados')">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                    </svg>
+                    Contatos Autorizados
+                </button>
+            </li>
         </ul>
 
         <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 20px; margin-bottom: 20px;">
@@ -1330,6 +1338,58 @@
             </div>
         </section>
 
+        <!-- AUTHORIZED TAB -->
+        <section class="tab-panel" id="panel-autorizados">
+            <div class="section-header">
+                <h2>Contatos e Agentes Autorizados</h2>
+                <p>Gerencie a lista de operadores humanos e agentes de IA autorizados a interagir com o Escavador via WhatsApp.</p>
+            </div>
+
+            <div class="card">
+                <div class="controls-row">
+                    <div class="search-container">
+                        <span class="search-icon">
+                            <svg viewBox="0 0 24 24">
+                                <path fill="currentColor"
+                                    d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                            </svg>
+                        </span>
+                        <input type="text" class="form-input" id="search-autorizados"
+                            placeholder="Pesquisar por número ou nome..." oninput="filtrarContatos()">
+                    </div>
+
+                    <div class="action-btns">
+                        <button class="btn btn-primary" onclick="abrirModalContato()">
+                            <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                            </svg>
+                            Adicionar Contato
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contacts list table -->
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Número WhatsApp</th>
+                                <th>Nome / Identificador</th>
+                                <th>Função / Permissão</th>
+                                <th style="text-align: right; width: 120px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl-autorizados-corpo">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                    Carregando contatos autorizados...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
     </main>
 
     <!-- CLIENT MODAL DIALOG -->
@@ -1400,9 +1460,41 @@
                 </div>
             </div>
 
+            </div>
+        </div>
+    </div>
+
+    <!-- AUTHORIZED CONTACT MODAL DIALOG -->
+    <div class="modal" id="modal-autorizado">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-autorizado-titulo">Adicionar Contato Autorizado</h3>
+            </div>
+
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+                <div class="form-group">
+                    <label for="modal-input-wa-number">Número WhatsApp (apenas números com DDI/DDD)</label>
+                    <input type="text" class="form-input" id="modal-input-wa-number"
+                        placeholder="Ex: 5561999999999">
+                </div>
+                <div class="form-group">
+                    <label for="modal-input-wa-nome">Nome do Operador ou Agente</label>
+                    <input type="text" class="form-input" id="modal-input-wa-nome"
+                        placeholder="Ex: Willian Batista, Agente Consultor">
+                </div>
+                <div class="form-group">
+                    <label for="modal-input-wa-permissao">Função / Permissão</label>
+                    <select class="form-input" id="modal-input-wa-permissao" style="background-color: #1a2238; color: white; border: 1px solid var(--border-color); height: 40px; padding: 0 12px; border-radius: 6px;">
+                        <option value="admin">Administrador (Acesso Total)</option>
+                        <option value="operador">Operador Interno (Apenas Consultas de Clientes)</option>
+                        <option value="agente">Agente de IA Interno (Consulta Automatizada)</option>
+                    </select>
+                </div>
+            </div>
+
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="fecharModalCliente()">Cancelar</button>
-                <button class="btn btn-primary" id="modal-confirm-btn" onclick="salvarModalCliente()">Confirmar</button>
+                <button class="btn btn-secondary" onclick="fecharModalAutorizado()">Cancelar</button>
+                <button class="btn btn-primary" onclick="salvarModalAutorizado()">Confirmar</button>
             </div>
         </div>
     </div>
@@ -1575,6 +1667,8 @@
                 carregarClientes();
             } else if (tabId === 'relatorios') {
                 carregarRelatorios();
+            } else if (tabId === 'autorizados') {
+                carregarContatosAutorizados();
             }
         }
 
@@ -1818,6 +1912,155 @@
                 }
             } catch (err) {
                 showToast("Erro ao excluir cliente.", "error");
+            }
+        }
+
+        /* --- AUTHORIZED CONTACTS LOGIC --- */
+        let listaAutorizadosCache = [];
+        let editandoContatoNumero = null;
+
+        async function carregarContatosAutorizados() {
+            try {
+                const response = await fetch('/api/autorizados');
+                if (!response.ok) return;
+                listaAutorizadosCache = await response.json();
+                renderizarTabelaContatos(listaAutorizadosCache);
+            } catch (err) {
+                showToast("Erro ao buscar contatos autorizados.", "error");
+            }
+        }
+
+        function renderizarTabelaContatos(contatos) {
+            const tbody = document.getElementById('tbl-autorizados-corpo');
+            if (!tbody) return;
+            if (contatos.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 30px;">Nenhum contato autorizado cadastrado no momento.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            contatos.forEach(c => {
+                let badgeClass = 'badge-info';
+                let roleName = 'Operador Interno';
+                if (c.permissao === 'admin') {
+                    badgeClass = 'badge-success';
+                    roleName = 'Administrador';
+                } else if (c.permissao === 'agente') {
+                    badgeClass = 'badge-warning';
+                    roleName = 'Agente de IA';
+                }
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="font-family: 'JetBrains Mono', monospace; font-weight: 500;">+${c.whatsapp_number}</td>
+                    <td>${c.nome}</td>
+                    <td><span class="badge ${badgeClass}">${roleName}</span></td>
+                    <td style="text-align: right;">
+                        <div class="action-btns" style="justify-content: flex-end;">
+                            <button class="btn btn-secondary" style="padding: 6px 10px; font-size: 0.75rem;" onclick="abrirModalContato('${c.whatsapp_number}', '${c.nome}', '${c.permissao}')">Editar</button>
+                            <button class="btn btn-danger" style="padding: 6px 10px; font-size: 0.75rem; background-color: var(--danger);" onclick="excluirContato('${c.whatsapp_number}')">Excluir</button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filtrarContatos() {
+            const query = document.getElementById('search-autorizados').value.toLowerCase().trim();
+            if (!query) {
+                renderizarTabelaContatos(listaAutorizadosCache);
+                return;
+            }
+            const filtrados = listaAutorizadosCache.filter(c =>
+                c.whatsapp_number.includes(query) || c.nome.toLowerCase().includes(query)
+            );
+            renderizarTabelaContatos(filtrados);
+        }
+
+        async function excluirContato(numero) {
+            if (!confirm(`Deseja realmente excluir permanentemente o contato com número +${numero} da lista de autorizados?`)) return;
+            try {
+                const response = await fetch(`/api/autorizados/${numero}`, { method: 'DELETE' });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                    carregarContatosAutorizados();
+                } else {
+                    showToast(res.message, "error");
+                }
+            } catch (err) {
+                showToast("Erro ao excluir contato autorizado.", "error");
+            }
+        }
+
+        function abrirModalContato(numero = null, nome = '', permissao = 'operador') {
+            editandoContatoNumero = numero;
+            const modal = document.getElementById('modal-autorizado');
+            const titulo = document.getElementById('modal-autorizado-titulo');
+            const inputNumero = document.getElementById('modal-input-wa-number');
+            const inputNome = document.getElementById('modal-input-wa-nome');
+            const selectPermissao = document.getElementById('modal-input-wa-permissao');
+
+            if (numero) {
+                titulo.innerText = "Editar Contato Autorizado";
+                inputNumero.value = numero;
+                inputNumero.disabled = true; // Não permite mudar o número na edição
+                inputNome.value = nome;
+                selectPermissao.value = permissao;
+            } else {
+                titulo.innerText = "Adicionar Contato Autorizado";
+                inputNumero.value = '';
+                inputNumero.disabled = false;
+                inputNome.value = '';
+                selectPermissao.value = 'operador';
+            }
+
+            modal.style.display = 'flex';
+        }
+
+        function fecharModalAutorizado() {
+            document.getElementById('modal-autorizado').style.display = 'none';
+        }
+
+        async function salvarModalAutorizado() {
+            const number = document.getElementById('modal-input-wa-number').value.trim();
+            const nome = document.getElementById('modal-input-wa-nome').value.trim();
+            const permissao = document.getElementById('modal-input-wa-permissao').value;
+
+            if (!number || !nome) {
+                showToast("Por favor, preencha todos os campos obrigatórios.", "warning");
+                return;
+            }
+
+            const cleanNumber = number.replace(/\D/g, '');
+            if (cleanNumber.length < 8) {
+                showToast("Número de WhatsApp inválido.", "warning");
+                return;
+            }
+
+            const payload = {
+                whatsapp_number: cleanNumber,
+                nome: nome,
+                permissao: permissao
+            };
+
+            try {
+                const response = await fetch('/api/autorizados', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                    fecharModalAutorizado();
+                    carregarContatosAutorizados();
+                } else {
+                    showToast(res.message, "error");
+                }
+            } catch (err) {
+                showToast("Erro de conexão ao salvar contato autorizado.", "error");
             }
         }
 

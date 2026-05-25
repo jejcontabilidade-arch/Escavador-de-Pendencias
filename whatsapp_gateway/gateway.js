@@ -50,6 +50,75 @@ function loadAuthorizedNumber() {
     }
 }
 
+let jidToPhoneMap = {}; // Maps: '69668748431583@lid' -> '5561986221356'
+let phoneToJidMap = {}; // Maps: '5561986221356' -> '69668748431583@lid'
+
+const csvPath = path.join(__dirname, '..', 'autorizados.csv');
+
+// Carrega números autorizados do CSV
+function loadAuthorizedNumbersFromCsv() {
+    const list = [];
+    try {
+        if (fs.existsSync(csvPath)) {
+            const data = fs.readFileSync(csvPath, 'utf-8');
+            const lines = data.split('\n');
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                const parts = line.split(',');
+                if (parts.length >= 3) {
+                    const number = parts[0].replace(/\D/g, '');
+                    const name = parts[1].trim();
+                    const permission = parts[2].trim().toLowerCase();
+                    if (number) {
+                        list.push({ number, name, permission });
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        log(`Erro ao ler autorizados.csv no gateway: ${err.message}`, 'ERROR');
+    }
+    return list;
+}
+
+// Atualiza o cache bidirecional JID <-> Telefone para contatos autorizados
+async function updateJidCache() {
+    if (!client) return;
+    
+    log('Atualizando cache de JIDs dos contatos autorizados...', 'INFO');
+    const csvContacts = loadAuthorizedNumbersFromCsv();
+    
+    // Adiciona o número padrão do config_private se existir
+    if (authorizedNumber) {
+        const cleanAuth = authorizedNumber.replace(/\D/g, '');
+        if (!csvContacts.some(c => c.number === cleanAuth)) {
+            csvContacts.push({ number: cleanAuth, name: 'Willian Administrador', permission: 'admin' });
+        }
+    }
+    
+    for (const contact of csvContacts) {
+        let phone = contact.number;
+        if (phone.length === 10 || phone.length === 11) {
+            phone = '55' + phone;
+        }
+        
+        try {
+            if (phoneToJidMap[phone]) continue; // Se já está no cache, pula
+            
+            const jid = await resolveJid(phone);
+            // Se resolveJid retornou um JID válido (não fallback simples)
+            if (jid && (!jid.endsWith('@c.us') || jid.includes('@lid') || jid.split('@')[0] !== phone)) {
+                phoneToJidMap[phone] = jid;
+                jidToPhoneMap[jid] = phone;
+            }
+        } catch (err) {
+            log(`Erro ao resolver cache para ${phone}: ${err.message}`, 'WARNING');
+        }
+    }
+    log(`Cache de JIDs atualizado. ${Object.keys(jidToPhoneMap).length} JIDs mapeados.`, 'SUCCESS');
+}
+
 // Resolver JID (ID interno do WhatsApp) a partir de um número de telefone
 async function resolveJid(to) {
     if (!client) return `${to}@c.us`;
@@ -65,6 +134,11 @@ async function resolveJid(to) {
     // Adicionar código do país (Brasil) se parecer estar faltando (DDDs brasileiros têm 2 dígitos)
     if (cleanTo.length === 10 || cleanTo.length === 11) {
         cleanTo = '55' + cleanTo;
+    }
+    
+    // Verificar cache primeiro
+    if (phoneToJidMap[cleanTo]) {
+        return phoneToJidMap[cleanTo];
     }
     
     try {
@@ -85,6 +159,8 @@ async function resolveJid(to) {
         
         if (jid && jid._serialized) {
             log(`JID resolvido com sucesso: ${jid._serialized}`);
+            phoneToJidMap[cleanTo] = jid._serialized;
+            jidToPhoneMap[jid._serialized] = cleanTo;
             return jid._serialized;
         }
         
@@ -201,7 +277,7 @@ async function initWhatsAppClient() {
         }
     });
 
-    client.on('ready', () => {
+    client.on('ready', async () => {
         log('O cliente do WhatsApp Web está PRONTO para enviar/receber mensagens!', 'SUCCESS');
         currentStatus = 'connected';
         latestQr = null;
@@ -211,6 +287,13 @@ async function initWhatsAppClient() {
         if (debugScreenshotInterval) {
             clearInterval(debugScreenshotInterval);
             debugScreenshotInterval = null;
+        }
+
+        // Atualizar o cache de JIDs assim que conectar
+        try {
+            await updateJidCache();
+        } catch (e) {
+            log(`Erro ao inicializar cache de JIDs: ${e.message}`, 'WARNING');
         }
     });
 
@@ -241,54 +324,56 @@ async function initWhatsAppClient() {
     client.on('message', async (msg) => {
         log(`Mensagem recebida de ${msg.from}: "${msg.body}"`);
 
-        // Recarregar configurações para ter o número autorizado mais recente
-        loadAuthorizedNumber();
-
-        if (!authorizedNumber) {
-            log('Mensagem ignorada: Nenhum número autorizado configurado.', 'SECURITY');
+        let fromJid = msg.from;
+        
+        // Se for de um grupo ou status broadcast, ignorar
+        if (fromJid.endsWith('@g.us') || fromJid === 'status@broadcast') {
             return;
         }
 
-        let senderPhoneNumber = '';
-        try {
-            const contact = await msg.getContact();
-            senderPhoneNumber = contact.number || '';
-        } catch (err) {
-            log(`Erro ao obter contato para verificar número: ${err.message}`, 'WARNING');
+        // Verificar se o JID está no cache. Se não estiver, atualiza o cache para ver se foi adicionado recentemente
+        if (!jidToPhoneMap[fromJid]) {
+            log(`JID ${fromJid} não encontrado no cache de autorizados. Atualizando cache...`, 'INFO');
+            try {
+                await updateJidCache();
+            } catch (e) {}
         }
 
-        // Fallback para msg.from se contact.number não estiver disponível
+        let senderPhoneNumber = jidToPhoneMap[fromJid];
+        
+        // Se ainda não estiver mapeado no cache, tenta obter o número pelo método tradicional msg.getContact()
         if (!senderPhoneNumber) {
-            senderPhoneNumber = msg.from.split('@')[0];
+            log(`JID ${fromJid} não está mapeado como autorizado. Tentando obter número via getContact...`, 'INFO');
+            try {
+                const contact = await msg.getContact();
+                senderPhoneNumber = contact.number || '';
+            } catch (err) {
+                log(`Erro ao obter contato para verificar número: ${err.message}`, 'WARNING');
+            }
+        }
+
+        // Fallback final para a parte do ID
+        if (!senderPhoneNumber) {
+            senderPhoneNumber = fromJid.split('@')[0];
         }
 
         const senderClean = senderPhoneNumber.replace(/\D/g, '');
-        const authClean = authorizedNumber.replace(/\D/g, '');
 
-        let isAuthorized = (senderClean === authClean) || senderClean.endsWith(authClean) || authClean.endsWith(senderClean);
-        if (!isAuthorized && senderClean.length >= 8 && authClean.length >= 8) {
-            isAuthorized = (senderClean.slice(-8) === authClean.slice(-8));
-        }
-
-        if (isAuthorized) {
-            log(`Mensagem vinda de número autorizado (${senderClean}). Repassando para o webhook Flask...`, 'INFO');
-            
-            // Monta o payload no formato esperado por agente_escavador.py (Z-API Mock)
-            const webhookPayload = {
-                phone: senderClean,
-                text: {
-                    message: msg.body
-                }
-            };
-
-            try {
-                const response = await axios.post('http://127.0.0.1:5000/api/webhook/whatsapp', webhookPayload, { timeout: 10000 });
-                log(`Webhook Flask respondeu: ${response.status} ${JSON.stringify(response.data)}`, 'SUCCESS');
-            } catch (err) {
-                log(`Erro ao notificar webhook Flask: ${err.message}`, 'ERROR');
+        log(`Repassando mensagem de ${senderClean} (JID: ${fromJid}) para o webhook Flask...`, 'INFO');
+        
+        // Monta o payload no formato esperado por agente_escavador.py (Z-API Mock)
+        const webhookPayload = {
+            phone: senderClean,
+            text: {
+                message: msg.body
             }
-        } else {
-            log(`Mensagem de número não autorizado (${senderClean}). Ignorando por segurança.`, 'SECURITY');
+        };
+
+        try {
+            const response = await axios.post('http://127.0.0.1:5000/api/webhook/whatsapp', webhookPayload, { timeout: 10000 });
+            log(`Webhook Flask respondeu: ${response.status} ${JSON.stringify(response.data)}`, 'SUCCESS');
+        } catch (err) {
+            log(`Erro ao notificar webhook Flask: ${err.message}`, 'ERROR');
         }
     });
 

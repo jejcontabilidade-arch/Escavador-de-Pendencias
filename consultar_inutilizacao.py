@@ -32,7 +32,7 @@ Data/Hora da Consulta: XXXXXXXXXXXXXX
 
 #colar chave de acesso nfe: ctl00$ContentPlaceHolder1$txtChaveAcessoResumo
 # clicar sou humano: checkbox
-# cicar continuar: ctl00$ContentPlaceHolder1$btnConsultarHCaptcha
+# clicar continuar: ctl00$ContentPlaceHolder1$btnConsultarHCaptcha
 # ao abrir nova pagina clicar em dowload do documento e guardar em pasta "documentos de consulta inutilização"
 
-# gerar o excel com resumos de cnpj e nome do cliente e chave de acesso, baixado ou nao baixado xml   
+# gerar um resumo em um excel com colunas de cnpj e nome do cliente e chave de acesso, baixado ou nao baixado consulta_inutilizacao.xlsx   
