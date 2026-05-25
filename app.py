@@ -26,8 +26,9 @@ from flask import Flask, render_template, jsonify, request, send_file, send_from
 
 app = Flask(__name__)
 
-# Variáveis globais para gerenciar o subprocesso da automação
+# Variáveis globais para gerenciar os subprocessos da automação e do gateway Node
 processo_automacao = None
+processo_gateway = None
 
 def load_config():
     config_path = "config.json"
@@ -151,40 +152,29 @@ def post_config():
     else:
         return jsonify({"status": "error", "message": "Falha ao salvar as configurações."}), 500
 
-# Rota para testar o envio de WhatsApp via Z-API
+# Rota para testar o envio de WhatsApp via Gateway local
 @app.route("/api/config/testar-whatsapp", methods=["POST"])
 def testar_whatsapp():
     dados = request.json or {}
-    instance = dados.get("whatsapp_zapi_instance")
-    token = dados.get("whatsapp_zapi_token")
     number = dados.get("whatsapp_number")
-    client_token = dados.get("whatsapp_zapi_client_token")
     
-    if not instance or not token or not number:
-        return jsonify({"status": "error", "message": "Instância, Token e Número do WhatsApp são obrigatórios para o teste."}), 400
+    if not number:
+        return jsonify({"status": "error", "message": "Número de telefone do WhatsApp é obrigatório para o teste."}), 400
         
-    number_clean = "".join(filter(str.isdigit, number))
-    if not number_clean.startswith("55") and len(number_clean) in [10, 11]:
-        number_clean = "55" + number_clean
-        
-    url = f"https://api.z-api.io/instances/{instance}/token/{token}/send-text"
-    headers = {"Content-Type": "application/json"}
-    if client_token:
-        headers["Client-Token"] = client_token
-        
+    url = "http://127.0.0.1:3000/api/send-message"
     payload = {
-        "phone": number_clean,
-        "message": "🤖 *Escavador de Pendências e-CAC*\n\nEste é um teste de comunicação da integração Z-API enviado pelo Painel de Controle Web. Configuração validada com sucesso!"
+        "to": number,
+        "message": "🤖 *Escavador de Pendências e-CAC*\n\nEste é um teste de comunicação enviado pela sua Instância Local do WhatsApp Web! Conectado com sucesso!"
     }
     
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response = requests.post(url, json=payload, timeout=15)
         if response.status_code in [200, 201]:
             return jsonify({"status": "success", "message": "Mensagem de teste enviada com sucesso!"})
         else:
-            return jsonify({"status": "error", "message": f"Erro Z-API ({response.status_code}): {response.text}"}), 400
+            return jsonify({"status": "error", "message": f"Erro do gateway local ({response.status_code}): {response.text}"}), 400
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Erro de conexão com a Z-API: {str(e)}"}), 500
+        return jsonify({"status": "error", "message": f"Não foi possível conectar ao gateway local (porta 3000): {str(e)}"}), 500
 
 # Rotas de Gestão de Clientes
 @app.route("/api/clientes", methods=["GET"])
@@ -961,6 +951,78 @@ def baixar_relatorio(caminho_completo):
             
     return jsonify({"status": "error", "message": "Caminho de download inválido."}), 400
 
+# Funções de Gerenciamento do Sub-serviço Node do WhatsApp
+def iniciar_gateway_whatsapp():
+    global processo_gateway
+    if processo_gateway and processo_gateway.poll() is None:
+        return
+        
+    print("Iniciando sub-serviço Node.js do WhatsApp Gateway...")
+    cmd = ["node", os.path.join("whatsapp_gateway", "gateway.js")]
+    
+    try:
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 0  # SW_HIDE
+            
+        os.makedirs("logs", exist_ok=True)
+        log_file = open(os.path.join("logs", "gateway_node.log"), "a", encoding="utf-8", buffering=1)
+        
+        processo_gateway = subprocess.Popen(
+            cmd,
+            stdout=log_file,
+            stderr=log_file,
+            cwd=os.getcwd(),
+            startupinfo=startupinfo
+        )
+        print("Sub-serviço Node.js do WhatsApp Gateway iniciado com sucesso.")
+    except Exception as e:
+        print(f"Falha ao iniciar sub-serviço Node.js do WhatsApp: {e}")
+
+def parar_gateway_whatsapp():
+    global processo_gateway
+    if processo_gateway and processo_gateway.poll() is None:
+        print("Encerrando sub-serviço Node.js do WhatsApp Gateway...")
+        try:
+            if os.name == 'nt':
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_gateway.pid)], capture_output=True)
+            else:
+                processo_gateway.terminate()
+            print("Sub-serviço Node.js do WhatsApp Gateway encerrado.")
+        except Exception as e:
+            print(f"Erro ao encerrar sub-serviço Node.js do WhatsApp: {e}")
+        processo_gateway = None
+
+import atexit
+atexit.register(parar_gateway_whatsapp)
+
+# Endpoints de Proxy para o WhatsApp Gateway local
+@app.route("/api/whatsapp/status", methods=["GET"])
+def api_whatsapp_status():
+    try:
+        response = requests.get("http://127.0.0.1:3000/api/status", timeout=5)
+        return jsonify(response.json())
+    except Exception:
+        return jsonify({"status": "disconnected", "error": "Gateway offline"})
+
+@app.route("/api/whatsapp/qr", methods=["GET"])
+def api_whatsapp_qr():
+    try:
+        response = requests.get("http://127.0.0.1:3000/api/qr", timeout=5)
+        return jsonify(response.json())
+    except Exception:
+        return jsonify({"qr": None, "status": "disconnected", "error": "Gateway offline"})
+
+@app.route("/api/whatsapp/desconectar", methods=["POST"])
+def api_whatsapp_desconectar():
+    try:
+        response = requests.post("http://127.0.0.1:3000/api/disconnect", timeout=10)
+        return jsonify(response.json())
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Erro ao desconectar: {str(e)}"}), 500
+
 if __name__ == "__main__":
     # Garantir que a pasta de logs e templates exista
     os.makedirs("logs", exist_ok=True)
@@ -974,8 +1036,13 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Não foi possível abrir o navegador automaticamente: {e}")
             
-    # Iniciar o túnel SSH e o registro de webhook na Z-API (executado apenas uma vez no processo ativo)
+    # Iniciar o gateway Node e o túnel SSH (executado apenas uma vez no processo ativo)
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
+        try:
+            iniciar_gateway_whatsapp()
+        except Exception as e:
+            print(f"Erro ao iniciar o gateway WhatsApp: {e}")
+            
         try:
             import tunnel_manager
             tunnel_manager.start()

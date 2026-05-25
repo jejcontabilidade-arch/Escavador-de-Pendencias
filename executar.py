@@ -356,9 +356,17 @@ def verificar_e_reestabelecer_sessao(page, config):
             if not config["headless"]:
                 log("Aguardando login manual na tela (limite de 120 segundos)...", "IMPORTANT")
                 
+                url_atual = "N/A"
+                if page:
+                    try:
+                        url_atual = page.url
+                    except Exception:
+                        pass
+                
                 mensagem_alerta = (
                     "⚠️ *ALERTA DO ROBÔ e-CAC (SESSÃO CAIU)*\n\n"
                     "A sessão do e-CAC caiu durante a varredura e o login automático falhou.\n"
+                    f"• *Link da Página Atual*: {url_atual}\n"
                     "• *O que fazer*: Acesse o computador e conclua o login manualmente na tela do navegador (resolva o CAPTCHA se houver).\n\n"
                     "O robô aguardará por até 2 minutos."
                 )
@@ -1624,9 +1632,17 @@ def realizar_login_manual(config):
             # Se demorou mais de 12 segundos, provavelmente precisa de intervenção manual (CAPTCHA, etc.)
             log("O login automático não concluiu in 12 segundos. Provavelmente é necessário resolver CAPTCHA ou selecionar certificado. Enviando alerta via WhatsApp...", "WARNING")
             
+            url_atual = "N/A"
+            if page:
+                try:
+                    url_atual = page.url
+                except Exception:
+                    pass
+            
             mensagem_alerta = (
                 "⚠️ *ALERTA DO ROBÔ e-CAC (INÍCIO DE CICLO)*\n\n"
                 "A automação precisa de intervenção para concluir o login no e-CAC!\n"
+                f"• *Link da Página Atual*: {url_atual}\n"
                 "• *Causa*: Provavelmente surgiu um CAPTCHA de imagem ou confirmação de certificado na tela.\n"
                 "• *O que fazer*: Acesse a tela do navegador aberto, resolva o CAPTCHA e conclua o login Gov.br.\n\n"
                 "O robô aguardará por até 5 minutos a conclusão do login."
@@ -1656,36 +1672,20 @@ def enviar_whatsapp(mensagem, config):
         log("Notificação via WhatsApp desabilitada nas configurações.", "INFO")
         return False
         
-    instance = config.get("whatsapp_zapi_instance")
-    token = config.get("whatsapp_zapi_token")
     number = config.get("whatsapp_number")
-    client_token = config.get("whatsapp_zapi_client_token")
-    
-    if not instance or not token or not number:
-        log("Erro: Configurações de WhatsApp (Instância, Token ou Número) incompletas.", "ERROR")
+    if not number:
+        log("Erro: Número de telefone do WhatsApp não configurado.", "ERROR")
         return False
         
-    # Higienizar número: apenas dígitos
-    number_clean = "".join(filter(str.isdigit, number))
-    # Garantir código do país
-    if not number_clean.startswith("55") and len(number_clean) in [10, 11]:
-        number_clean = "55" + number_clean
-        
-    url = f"https://api.z-api.io/instances/{instance}/token/{token}/send-text"
-    headers = {
-        "Content-Type": "application/json"
-    }
-    if client_token:
-        headers["Client-Token"] = client_token
-        
+    url = "http://127.0.0.1:3000/api/send-message"
     payload = {
-        "phone": number_clean,
+        "to": number,
         "message": mensagem
     }
     
-    log(f"Enviando notificação WhatsApp via Z-API para {number_clean}...", "INFO")
+    log("Enviando notificação WhatsApp via gateway local...", "INFO")
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=15)
+        response = requests.post(url, json=payload, timeout=15)
         if response.status_code in [200, 201]:
             log("Notificação via WhatsApp enviada com sucesso!", "SUCCESS")
             return True
@@ -1981,6 +1981,7 @@ def main():
                     max_tentativas = 1
                     sucesso_cliente = False
                     erro_final = None
+                    url_erro = "N/A"
                     
                     for tentativa in range(1, max_tentativas + 1):
                         try:
@@ -2029,6 +2030,11 @@ def main():
                         except JapeException as e:
                             log(f"[ERRO JAPE] Erro temporário e-CAC (107.6) para {nome} ({cnpj}): {e}", "WARNING")
                             erro_final = e
+                            if page:
+                                try:
+                                    url_erro = page.url
+                                except Exception:
+                                    pass
                             
                             # Fechar abas extras se acumularam
                             try:
@@ -2055,6 +2061,11 @@ def main():
                         except Exception as e:
                             log(f"[ERRO - TENTATIVA {tentativa}/{max_tentativas}] Erro ao processar cliente {nome} ({cnpj}): {e}", "WARNING")
                             erro_final = e
+                            if page:
+                                try:
+                                    url_erro = page.url
+                                except Exception:
+                                    pass
                             
                             # Enriquecer o erro com textos visíveis na tela (mensagens de erro do e-CAC/Gov.br)
                             msg_tela = ""
@@ -2132,7 +2143,7 @@ def main():
                         # Salvar log de erro definitivo
                         try:
                             save_client_status(config["relatorios_dir"], cnpj, nome, "Erro", str(erro_final))
-                            enviar_whatsapp(f"❌ *Falha*: {nome} - {str(erro_final)}", config)
+                            enviar_whatsapp(f"❌ *Falha*: {nome} - {str(erro_final)}\n• *Página do Erro*: {url_erro}", config)
                         except Exception as save_err:
                             log(f"Não foi possível salvar status de erro para o cliente: {save_err}", "WARNING")
                         failure_count += 1

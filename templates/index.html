@@ -781,6 +781,12 @@
                     Configurações
                 </button>
             </li>
+            <li class="nav-item" id="nav-whatsapp">
+                <button onclick="switchTab('whatsapp')">
+                    <svg viewBox="0 0 24 24"><path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.96 9.96 0 0 0 1.335 4.978L2 22l5.197-1.363a9.94 9.94 0 0 0 4.815 1.238h.005c5.505 0 9.99-4.478 9.99-9.984a9.99 9.99 0 0 0-9.995-9.991zm0 18.29h-.004a8.272 8.272 0 0 1-4.224-1.164l-.303-.18-3.141.823.839-3.059-.197-.314a8.275 8.275 0 0 1-1.27-4.414c0-4.57 3.722-8.29 8.299-8.29a8.28 8.28 0 0 1 8.29 8.294 8.293 8.293 0 0 1-8.29 8.294z"/></svg>
+                    Instância WhatsApp
+                </button>
+            </li>
         </ul>
 
         <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 20px; margin-bottom: 20px;">
@@ -1040,9 +1046,9 @@
                         </div>
                     </div>
 
-                    <!-- WhatsApp Settings (Z-API) -->
+                    <!-- WhatsApp Settings -->
                     <div class="card">
-                        <h3 style="border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 10px;">Notificações WhatsApp (Z-API)</h3>
+                        <h3 style="border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 10px;">Notificações WhatsApp</h3>
                         
                         <div class="form-row-checkbox">
                             <label class="switch">
@@ -1057,32 +1063,76 @@
 
                         <div class="form-group">
                             <label for="cfg-wa-number">Número WhatsApp Responsável</label>
-                            <input type="text" class="form-input wa-field" id="cfg-wa-number" placeholder="Ex: 61999999999">
+                            <input type="text" class="form-input wa-field" id="cfg-wa-number" placeholder="Ex: 5561999999999">
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Número do administrador do sistema que receberá alertas e controlará o robô (com código do país).</span>
                         </div>
 
-                        <div class="form-group">
-                            <label for="cfg-wa-instance">Instância Z-API</label>
-                            <input type="text" class="form-input wa-field" id="cfg-wa-instance" placeholder="Código da Instância">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="cfg-wa-token">Token Z-API</label>
-                            <input type="password" class="form-input wa-field" id="cfg-wa-token" placeholder="Token Z-API">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="cfg-wa-client-token">Client Token Z-API (Opcional)</label>
-                            <input type="password" class="form-input wa-field" id="cfg-wa-client-token" placeholder="Client Token Z-API">
-                        </div>
-
-                        <div style="display: flex; gap: 10px; margin-top: 10px;">
-                            <button type="button" class="btn btn-secondary" style="flex-grow: 1;" onclick="testarConexaoWhatsapp()">Testar Envio</button>
-                            <button type="submit" class="btn btn-primary" style="flex-grow: 1;">Salvar Configurações</button>
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button type="submit" class="btn btn-primary" style="width: 100%;">Salvar Configurações</button>
                         </div>
                     </div>
 
                 </div>
             </form>
+        </section>
+
+        <!-- WHATSAPP INSTANCE TAB -->
+        <section class="tab-panel" id="panel-whatsapp">
+            <div class="section-header">
+                <h2>Instância WhatsApp Web</h2>
+                <p>Gerencie o pareamento local do WhatsApp Web com este painel sem dependência de Z-API.</p>
+            </div>
+
+            <!-- Loading Status -->
+            <div class="card" id="wa-loading-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; text-align: center; gap: 16px;">
+                <svg class="spinner" style="width: 48px; height: 48px; color: var(--primary);" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="40 10"></circle>
+                </svg>
+                <p style="color: var(--text-muted); font-size: 1rem;">Aguardando inicialização do WhatsApp Web...</p>
+            </div>
+
+            <!-- QR Code Connection -->
+            <div class="card" id="wa-qr-container" style="display: none; align-items: center; justify-content: center; flex-direction: column; padding: 40px; text-align: center; gap: 20px;">
+                <div style="background-color: white; padding: 16px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
+                    <img id="wa-qr-img" src="" alt="QR Code WhatsApp" style="width: 256px; height: 256px; display: block;">
+                </div>
+                <div style="max-width: 450px;">
+                    <h3 style="margin-bottom: 8px;">Conecte seu WhatsApp</h3>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5;">
+                        Abra o WhatsApp no seu celular, vá em <strong>Aparelhos conectados</strong> &gt; <strong>Conectar um aparelho</strong> e aponte a câmera para o QR Code acima.
+                    </p>
+                </div>
+                <button class="btn btn-secondary" onclick="obterQrCodeWhatsapp(true)">Forçar Novo QR Code</button>
+            </div>
+
+            <!-- Connected Screen -->
+            <div class="card" id="wa-connected-container" style="display: none; flex-direction: column; align-items: center; justify-content: center; padding: 40px; text-align: center; gap: 20px; background: linear-gradient(135deg, rgba(56, 176, 0, 0.15), rgba(28, 37, 65, 0.4)); border: 1px solid rgba(56, 176, 0, 0.3);">
+                <div style="width: 64px; height: 64px; background-color: var(--success); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 0 15px var(--success);">
+                    <svg viewBox="0 0 24 24" style="width: 36px; height: 36px; fill: currentColor;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                </div>
+                <div style="max-width: 400px;">
+                    <h3 style="margin-bottom: 8px; color: #ffffff;">WhatsApp Conectado!</h3>
+                    <p style="color: var(--text-color); font-size: 0.95rem; line-height: 1.5; margin-bottom: 4px;">
+                        Sua instância local do WhatsApp Web está pareada e pronta.
+                    </p>
+                    <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.5;">
+                        Qualquer relatório gerado pela automação será disparado para o número do responsável. O bot também responderá a comandos vindos dele.
+                    </p>
+                </div>
+                <button class="btn btn-danger" onclick="desconectarWhatsapp()">Desconectar WhatsApp</button>
+            </div>
+
+            <!-- Test Message Card -->
+            <div class="card" id="wa-test-card" style="display: none; flex-direction: column; gap: 16px;">
+                <h3 style="border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 4px;">Teste de Comunicação</h3>
+                <div class="form-group">
+                    <label for="wa-test-message">Mensagem de Teste</label>
+                    <textarea class="form-input" id="wa-test-message" rows="3" placeholder="Digite uma mensagem para testar o envio..." style="resize: vertical; font-family: inherit;"></textarea>
+                </div>
+                <div style="display: flex; justify-content: flex-end;">
+                    <button class="btn btn-primary" onclick="enviarMensagemTesteLocal()">Enviar Teste</button>
+                </div>
+            </div>
         </section>
 
     </main>
@@ -1175,7 +1225,135 @@
             // Iniciar o monitoramento de status recorrente (a cada 2 segundos)
             obterStatusRobo();
             statusIntervalId = setInterval(obterStatusRobo, 2000);
+
+            // Iniciar o monitoramento de status do WhatsApp (a cada 3 segundos)
+            obterStatusWhatsapp();
+            setInterval(obterStatusWhatsapp, 3000);
         });
+
+        /* --- LOCAL WHATSAPP GATEWAY CLIENT LOGIC --- */
+        let lastWhatsappStatus = '';
+
+        async function obterStatusWhatsapp() {
+            // Só faz requisição se estiver na aba do whatsapp ou se o status anterior não for 'connected'
+            if (activeTab !== 'whatsapp' && lastWhatsappStatus === 'connected') {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/whatsapp/status');
+                if (!response.ok) return;
+                const data = await response.json();
+                
+                const status = data.status;
+                lastWhatsappStatus = status;
+                
+                const loading = document.getElementById('wa-loading-container');
+                const qrContainer = document.getElementById('wa-qr-container');
+                const connected = document.getElementById('wa-connected-container');
+                const testCard = document.getElementById('wa-test-card');
+                
+                if (status === 'connected') {
+                    loading.style.display = 'none';
+                    qrContainer.style.display = 'none';
+                    connected.style.display = 'flex';
+                    if (testCard) testCard.style.display = 'flex';
+                } else if (status === 'qr_ready') {
+                    loading.style.display = 'none';
+                    qrContainer.style.display = 'flex';
+                    connected.style.display = 'none';
+                    if (testCard) testCard.style.display = 'none';
+                    
+                    // Carrega a imagem do QR Code
+                    obterQrCodeWhatsapp(false);
+                } else if (status === 'authenticating') {
+                    loading.style.display = 'flex';
+                    document.querySelector('#wa-loading-container p').innerText = 'WhatsApp está restabelecendo sessão ou gerando QR Code...';
+                    qrContainer.style.display = 'none';
+                    connected.style.display = 'none';
+                    if (testCard) testCard.style.display = 'none';
+                } else {
+                    // disconnected
+                    loading.style.display = 'flex';
+                    document.querySelector('#wa-loading-container p').innerText = 'Aguardando inicialização do WhatsApp Web...';
+                    qrContainer.style.display = 'none';
+                    connected.style.display = 'none';
+                    if (testCard) testCard.style.display = 'none';
+                }
+            } catch (err) {
+                console.error("Erro ao obter status do WhatsApp:", err);
+            }
+        }
+
+        async function obterQrCodeWhatsapp(forcar = false) {
+            const qrImg = document.getElementById('wa-qr-img');
+            // Evita carregar repetidamente se a imagem já estiver carregada e não forçar
+            if (qrImg.src && qrImg.src.startsWith('data:') && !forcar) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/whatsapp/qr');
+                if (!response.ok) return;
+                const data = await response.json();
+                if (data.qr) {
+                    qrImg.src = data.qr;
+                }
+            } catch (err) {
+                console.error("Erro ao obter QR Code:", err);
+            }
+        }
+
+        async function desconectarWhatsapp() {
+            if (!confirm("Deseja realmente desconectar e apagar a sessão atual do WhatsApp Web? Você precisará ler o QR Code novamente.")) return;
+            
+            showToast("Desconectando do WhatsApp...", "warning");
+            try {
+                const response = await fetch('/api/whatsapp/desconectar', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    showToast(data.message, "success");
+                    obterStatusWhatsapp();
+                } else {
+                    showToast("Erro ao desconectar.", "error");
+                }
+            } catch (err) {
+                showToast("Erro de rede ao desconectar WhatsApp.", "error");
+            }
+        }
+
+        async function enviarMensagemTesteLocal() {
+            const msg = document.getElementById('wa-test-message').value.trim();
+            if (!msg) {
+                alert("Escreva uma mensagem de teste.");
+                return;
+            }
+            
+            const waNumberInput = document.getElementById('cfg-wa-number');
+            const waNumber = waNumberInput ? waNumberInput.value.trim() : '';
+            if (!waNumber) {
+                alert("Por favor, configure o 'Número WhatsApp Responsável' na aba de Configurações antes de realizar o teste.");
+                return;
+            }
+            
+            showToast("Enviando mensagem de teste via gateway local...", "warning");
+            try {
+                const response = await fetch('/api/config/testar-whatsapp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ whatsapp_number: waNumber })
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast("Mensagem de teste enviada com sucesso!", "success");
+                } else {
+                    showToast(res.message, "error");
+                    alert(res.message);
+                }
+            } catch (err) {
+                showToast("Erro de conexão ao disparar teste.", "error");
+            }
+        }
 
         // Alternador de Abas (Navigation Tabs)
         function switchTab(tabId) {
@@ -1724,9 +1902,6 @@
                 
                 document.getElementById('cfg-wa-enabled').checked = config.whatsapp_enabled;
                 document.getElementById('cfg-wa-number').value = config.whatsapp_number || '';
-                document.getElementById('cfg-wa-instance').value = config.whatsapp_zapi_instance || '';
-                document.getElementById('cfg-wa-token').value = config.whatsapp_zapi_token || '';
-                document.getElementById('cfg-wa-client-token').value = config.whatsapp_zapi_client_token || '';
                 
                 toggleWaFields(config.whatsapp_enabled);
             } catch (err) {
@@ -1750,9 +1925,6 @@
             
             const waEnabled = document.getElementById('cfg-wa-enabled').checked;
             const waNumber = document.getElementById('cfg-wa-number').value.trim();
-            const waInstance = document.getElementById('cfg-wa-instance').value.trim();
-            const waToken = document.getElementById('cfg-wa-token').value.trim();
-            const waClientToken = document.getElementById('cfg-wa-client-token').value.trim();
 
             const config = {
                 cert_first_char: cert,
@@ -1760,10 +1932,7 @@
                 timeout_ms: timeoutSec * 1000,
                 openai_api_key: openaiApiKey,
                 whatsapp_enabled: waEnabled,
-                whatsapp_number: waNumber,
-                whatsapp_zapi_instance: waInstance,
-                whatsapp_zapi_token: waToken,
-                whatsapp_zapi_client_token: waClientToken
+                whatsapp_number: waNumber
             };
 
             showToast("Salvando configurações no servidor...", "warning");
@@ -1782,41 +1951,6 @@
                 }
             } catch (err) {
                 showToast("Erro ao salvar as configurações.", "error");
-            }
-        }
-
-        async function testarConexaoWhatsapp() {
-            const waNumber = document.getElementById('cfg-wa-number').value.trim();
-            const waInstance = document.getElementById('cfg-wa-instance').value.trim();
-            const waToken = document.getElementById('cfg-wa-token').value.trim();
-            const waClientToken = document.getElementById('cfg-wa-client-token').value.trim();
-
-            if (!waNumber || !waInstance || !waToken) {
-                alert("Preencha o Número do Responsável, Instância Z-API e Token Z-API para realizar o teste.");
-                return;
-            }
-
-            showToast("Enviando disparo de teste para o WhatsApp...", "warning");
-            try {
-                const response = await fetch('/api/config/testar-whatsapp', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        whatsapp_number: waNumber,
-                        whatsapp_zapi_instance: waInstance,
-                        whatsapp_zapi_token: waToken,
-                        whatsapp_zapi_client_token: waClientToken
-                    })
-                });
-                const res = await response.json();
-                if (response.ok) {
-                    showToast(res.message, "success");
-                } else {
-                    showToast(res.message, "error");
-                    alert(res.message);
-                }
-            } catch (err) {
-                showToast("Falha de rede ao disparar teste do WhatsApp.", "error");
             }
         }
 

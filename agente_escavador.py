@@ -15,91 +15,66 @@ def enviar_mensagem_whatsapp(mensagem, config):
     if not config.get("whatsapp_enabled"):
         return False
         
-    instance = config.get("whatsapp_zapi_instance")
-    token = config.get("whatsapp_zapi_token")
     number = config.get("whatsapp_number")
-    client_token = config.get("whatsapp_zapi_client_token")
-    
-    if not instance or not token or not number:
-        log("Erro: Configurações de WhatsApp incompletas para envio.", "ERROR")
+    if not number:
+        log("Erro: Número de telefone do WhatsApp não configurado.", "ERROR")
         return False
         
-    number_clean = "".join(filter(str.isdigit, number))
-    if not number_clean.startswith("55") and len(number_clean) in [10, 11]:
-        number_clean = "55" + number_clean
-        
-    url = f"https://api.z-api.io/instances/{instance}/token/{token}/send-text"
-    headers = {"Content-Type": "application/json"}
-    if client_token:
-        headers["Client-Token"] = client_token
-        
+    url = "http://127.0.0.1:3000/api/send-message"
     payload = {
-        "phone": number_clean,
+        "to": number,
         "message": mensagem
     }
     
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        response = requests.post(url, json=payload, timeout=15)
         return response.status_code in [200, 201]
     except Exception as e:
-        log(f"Erro ao enviar mensagem via Z-API: {e}", "ERROR")
+        log(f"Erro ao enviar mensagem via gateway local: {e}", "ERROR")
         return False
 
 def enviar_documento_whatsapp(caminho_arquivo, nome_arquivo, config):
     if not config.get("whatsapp_enabled"):
         return False
         
-    instance = config.get("whatsapp_zapi_instance")
-    token = config.get("whatsapp_zapi_token")
     number = config.get("whatsapp_number")
-    client_token = config.get("whatsapp_zapi_client_token")
-    
-    if not instance or not token or not number:
+    if not number:
         return False
-        
-    number_clean = "".join(filter(str.isdigit, number))
-    if not number_clean.startswith("55") and len(number_clean) in [10, 11]:
-        number_clean = "55" + number_clean
-        
-    # Determinar mime-type por extensão
-    ext = os.path.splitext(nome_arquivo)[1].lower()
-    mime = "application/octet-stream"
-    if ext == ".pdf":
-        mime = "application/pdf"
-    elif ext == ".xlsx":
-        mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    elif ext == ".txt":
-        mime = "text/plain"
-    elif ext == ".png":
-        mime = "image/png"
         
     try:
         with open(caminho_arquivo, "rb") as f:
             base64_content = base64.b64encode(f.read()).decode("utf-8")
             
+        ext = os.path.splitext(nome_arquivo)[1].lower()
+        mime = "application/octet-stream"
+        if ext == ".pdf":
+            mime = "application/pdf"
+        elif ext == ".xlsx":
+            mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        elif ext == ".txt":
+            mime = "text/plain"
+        elif ext == ".png":
+            mime = "image/png"
+            
         document_payload = f"data:{mime};base64,{base64_content}"
         
-        url = f"https://api.z-api.io/instances/{instance}/token/{token}/send-document"
-        headers = {"Content-Type": "application/json"}
-        if client_token:
-            headers["Client-Token"] = client_token
-            
+        url = "http://127.0.0.1:3000/api/send-document"
         payload = {
-            "phone": number_clean,
+            "to": number,
             "document": document_payload,
             "fileName": nome_arquivo
         }
         
-        log(f"Enviando documento '{nome_arquivo}' ({ext}) via Z-API...")
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        log(f"Enviando documento '{nome_arquivo}' ({ext}) via gateway local...")
+        response = requests.post(url, json=payload, timeout=30)
         if response.status_code in [200, 201]:
             log(f"Documento '{nome_arquivo}' enviado com sucesso!", "SUCCESS")
             return True
         else:
-            log(f"Falha ao enviar documento Z-API. Status: {response.status_code}, Resposta: {response.text}", "ERROR")
+            log(f"Falha ao enviar documento. Status: {response.status_code}, Resposta: {response.text}", "ERROR")
             return False
     except Exception as e:
-        log(f"Erro ao enviar documento via Z-API: {e}", "ERROR")
+        log(f"Erro ao enviar documento via gateway local: {e}", "ERROR")
         return False
 
 def obter_status_resumo(config, rodando_atualmente):
@@ -240,6 +215,45 @@ def localizar_e_enviar_documento(nome_pesquisa, config):
     else:
         return f"❌ Falha ao enviar o documento '{nome_final}' via WhatsApp. Verifique as configurações da Z-API."
 
+def adicionar_novo_cliente_csv(cnpj, nome, config):
+    csv_path = config.get("clientes_file", "clientes.csv")
+    cnpj_clean = "".join(filter(str.isdigit, cnpj))
+    nome_clean = nome.strip().upper()
+    
+    # 1. Verificar se o cliente já existe
+    if os.path.exists(csv_path):
+        try:
+            with open(csv_path, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    row_cnpj = "".join(filter(str.isdigit, row.get("cnpj", "")))
+                    if row_cnpj == cnpj_clean:
+                        return f"O cliente '{nome_clean}' com CNPJ/CPF {cnpj_clean} já está cadastrado no sistema!"
+        except Exception as e:
+            log(f"Erro ao ler clientes.csv: {e}", "ERROR")
+            
+    # 2. Adicionar o cliente
+    try:
+        # Abre o arquivo para append
+        # Verifica se termina com newline para não colar na linha anterior
+        has_newline = True
+        if os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
+            with open(csv_path, "rb") as f_bin:
+                f_bin.seek(-1, os.SEEK_END)
+                last_char = f_bin.read(1)
+                has_newline = last_char in [b'\n', b'\r']
+                
+        with open(csv_path, "a", encoding="utf-8", newline="") as f:
+            if not has_newline:
+                f.write("\n")
+            writer = csv.writer(f)
+            writer.writerow([cnpj_clean, nome_clean, "True"])
+        log(f"Cliente {nome_clean} ({cnpj_clean}) adicionado com sucesso ao CSV.", "SUCCESS")
+        return f"✅ *Cliente adicionado com sucesso!*\n• *Nome:* {nome_clean}\n• *CNPJ/CPF:* {cnpj_clean}\n• *Status:* Ativo"
+    except Exception as e:
+        log(f"Erro ao adicionar cliente no CSV: {e}", "ERROR")
+        return f"❌ Erro ao adicionar o cliente no arquivo do sistema: {e}"
+
 def interpretar_mensagem_com_gpt(texto_mensagem, config):
     openai_key = config.get("openai_api_key", "").strip()
     if not openai_key:
@@ -265,12 +279,14 @@ As intenções suportadas são:
 5. "listar_clientes_ok" (Consultar lista de clientes com sucesso hoje)
 6. "listar_clientes_pendentes_erro" (Consultar lista de clientes com falhas ou pendentes hoje)
 7. "baixar_documento" (Baixar ou obter a certidão/relatório de um cliente específico. Requer o parâmetro 'empresa')
-8. "conversa_casual" (Outro tipo de mensagem, dúvidas gerais sobre o sistema ou saudações)
+8. "adicionar_cliente" (Adicionar um novo cliente/empresa ao sistema. Requer o nome completo em 'empresa' e o CNPJ/CPF em 'cnpj')
+9. "conversa_casual" (Outro tipo de mensagem, dúvidas gerais sobre o sistema ou saudações)
 
 Retorne estritamente um JSON no seguinte formato (sem formatação markdown ou blocos de código):
 {
   "intencao": "uma das intenções acima",
-  "empresa": "nome ou cnpj da empresa se a intenção for baixar_documento, senão nulo",
+  "empresa": "nome ou cnpj da empresa se a intenção for baixar_documento, ou o nome completo se for adicionar_cliente, senão nulo",
+  "cnpj": "o CNPJ ou CPF do cliente (apenas números) se a intenção for adicionar_cliente, senão nulo",
   "resposta_humana": "uma resposta humana, amigável e profissional em português para o Willian, confirmando o que você vai fazer ou respondendo a dúvida dele de forma natural e empática"
 }
 """
@@ -302,17 +318,28 @@ def interpretar_mensagem_heuristica(texto):
     
     # Heurística simples
     if "parar" in t or "interromper" in t or "para" in t or "cancela" in t:
-        return {"intencao": "interromper_varredura", "empresa": None, "resposta_humana": None}
+        return {"intencao": "interromper_varredura", "empresa": None, "cnpj": None, "resposta_humana": None}
     elif "status" in t or "como esta" in t or "como está" in t or "progresso" in t or "log" in t:
-        return {"intencao": "obter_status", "empresa": None, "resposta_humana": None}
+        return {"intencao": "obter_status", "empresa": None, "cnpj": None, "resposta_humana": None}
     elif "todos" in t or "completo" in t or "forçar todos" in t or "do inicio" in t:
-        return {"intencao": "iniciar_varredura_total", "empresa": None, "resposta_humana": None}
+        return {"intencao": "iniciar_varredura_total", "empresa": None, "cnpj": None, "resposta_humana": None}
     elif "iniciar" in t or "começar" in t or "rodar" in t or "executar" in t:
-        return {"intencao": "iniciar_varredura", "empresa": None, "resposta_humana": None}
+        return {"intencao": "iniciar_varredura", "empresa": None, "cnpj": None, "resposta_humana": None}
     elif "inadimplente" in t or "falha" in t or "erro" in t or "pendente" in t:
-        return {"intencao": "listar_clientes_pendentes_erro", "empresa": None, "resposta_humana": None}
+        return {"intencao": "listar_clientes_pendentes_erro", "empresa": None, "cnpj": None, "resposta_humana": None}
     elif "ok" in t or "sucesso" in t or "regular" in t:
-        return {"intencao": "listar_clientes_ok", "empresa": None, "resposta_humana": None}
+        return {"intencao": "listar_clientes_ok", "empresa": None, "cnpj": None, "resposta_humana": None}
+    elif "adicionar" in t or "cadastrar" in t or "novo cliente" in t or "inserir" in t:
+        # Extrair potencial CNPJ/CPF da mensagem (apenas dígitos)
+        numeros = "".join(filter(str.isdigit, texto))
+        cnpj = numeros if len(numeros) in [11, 14] else None
+        
+        # Tentar extrair nome (tudo que não é verbo/número)
+        palavras = [p for p in texto.split() if not p.isdigit()]
+        empresa = None
+        if len(palavras) > 2:
+            empresa = " ".join(palavras[2:]) if "novo" in palavras else " ".join(palavras[1:])
+        return {"intencao": "adicionar_cliente", "empresa": empresa, "cnpj": cnpj, "resposta_humana": None}
     elif "cnd" in t or "certidao" in t or "documento" in t or "relatorio" in t or "manda" in t or "envia" in t:
         # Extrair potencial nome de empresa da frase
         palavras = texto.split()
@@ -320,11 +347,12 @@ def interpretar_mensagem_heuristica(texto):
         if len(palavras) > 1:
             # Pega as palavras após o comando básico
             empresa = " ".join(palavras[1:])
-        return {"intencao": "baixar_documento", "empresa": empresa, "resposta_humana": None}
+        return {"intencao": "baixar_documento", "empresa": empresa, "cnpj": None, "resposta_humana": None}
     else:
         return {
             "intencao": "conversa_casual", 
             "empresa": None, 
+            "cnpj": None,
             "resposta_humana": "Olá! Sou o Agente Escavador da J&J Contabilidade. Consigo entender comandos como 'Iniciar varredura', 'Como está o status?', 'Lista de erros', 'Lista de sucessos', 'Parar automação' ou 'Me mande a certidão de [Nome da Empresa]'."
         }
 
@@ -341,8 +369,12 @@ def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_cal
         log("Alerta: Nenhum número autorizado cadastrado no config_private.json ('whatsapp_number').", "WARNING")
         return False
         
-    # Verificar se as strings terminam com os mesmos dígitos (para ignorar prefixos como 55, etc.)
-    if not sender_clean.endswith(auth_clean) and not auth_clean.endswith(sender_clean):
+    # Verificar se as strings batem, tolerando DDD, DDI e 9º dígito
+    is_authorized = (sender_clean == auth_clean) or sender_clean.endswith(auth_clean) or auth_clean.endswith(sender_clean)
+    if not is_authorized and len(sender_clean) >= 8 and len(auth_clean) >= 8:
+        is_authorized = (sender_clean[-8:] == auth_clean[-8:])
+        
+    if not is_authorized:
         log(f"Mensagem recebida de número não autorizado ({sender_clean}). Ignorando por segurança.", "SECURITY")
         return False
         
@@ -360,9 +392,10 @@ def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_cal
     res = interpretar_mensagem_com_gpt(texto_mensagem, config)
     intencao = res.get("intencao")
     empresa = res.get("empresa")
+    cnpj = res.get("cnpj")
     resposta_humana = res.get("resposta_humana")
     
-    log(f"Intenção detectada: '{intencao}' (Empresa: '{empresa}')")
+    log(f"Intenção detectada: '{intencao}' (Empresa: '{empresa}', CNPJ: '{cnpj}')")
     
     # 4. Executar a Intenção
     # Sempre enviar a resposta humana da IA primeiro se ela existir (para dar um tom natural e conversacional)
@@ -418,6 +451,14 @@ def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_cal
                 enviar_mensagem_whatsapp(f"🔍 Buscando arquivos fiscais de *{empresa}*...", config)
             msg_resposta = localizar_e_enviar_documento(empresa, config)
             enviar_mensagem_whatsapp(msg_resposta, config)
+            
+    elif intencao == "adicionar_cliente":
+        if not empresa or not cnpj:
+            msg_erro = "🤖 Willian, para cadastrar o novo cliente preciso do *Nome Completo* e também do *CNPJ ou CPF*. Pode me enviar novamente com essas informações?"
+            enviar_mensagem_whatsapp(msg_erro, config)
+        else:
+            resultado = adicionar_novo_cliente_csv(cnpj, empresa, config)
+            enviar_mensagem_whatsapp(resultado, config)
             
     elif intencao == "conversa_casual":
         if not resposta_humana:
