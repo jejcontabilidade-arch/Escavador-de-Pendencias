@@ -130,13 +130,14 @@ def tunnel_worker():
                     
                 # Procurar padrão de URL HTTPS lhr.life
                 match = re.search(r"(https://[a-zA-Z0-9.-]+\.lhr\.life)", line)
-                if match and not url_detected:
-                    active_tunnel_url = match.group(1)
-                    log(f"Túnel estabelecido com sucesso! URL pública: {active_tunnel_url}", "SUCCESS")
-                    url_detected = True
-                    
-                    # Registrar webhook de forma assíncrona para não travar a leitura do stdout
-                    threading.Thread(target=registrar_webhook_zapi, args=(active_tunnel_url,), daemon=True).start()
+                if match:
+                    detected_url = match.group(1)
+                    if detected_url != active_tunnel_url:
+                        active_tunnel_url = detected_url
+                        log(f"Túnel estabelecido! URL pública: {active_tunnel_url}", "SUCCESS")
+                        
+                        # Registrar webhook de forma assíncrona para não travar a leitura do stdout
+                        threading.Thread(target=registrar_webhook_zapi, args=(active_tunnel_url,), daemon=True).start()
                     
             # Se saiu do loop, espera o término do processo
             ssh_process.wait()

@@ -254,7 +254,8 @@ def interpretar_mensagem_com_gpt(texto_mensagem, config):
     }
     
     prompt = """Você é o Agente Escavador, o assistente virtual inteligente da J&J Contabilidade que controla o sistema de automação e-CAC.
-Sua tarefa é analisar a mensagem do usuário e deduzir sua intenção operacional.
+O usuário é o Willian, administrador do sistema.
+Sua tarefa é analisar a mensagem do usuário, deduzir sua intenção operacional e gerar uma resposta em linguagem natural que seja extremamente humana, amigável, natural e adequada ao contexto.
 
 As intenções suportadas são:
 1. "iniciar_varredura" (Iniciar varredura comum do dia, ignorando quem já deu sucesso)
@@ -270,7 +271,7 @@ Retorne estritamente um JSON no seguinte formato (sem formatação markdown ou b
 {
   "intencao": "uma das intenções acima",
   "empresa": "nome ou cnpj da empresa se a intenção for baixar_documento, senão nulo",
-  "resposta_humana": "resposta amigável e direta em Português se a intenção for conversa_casual, senão nula"
+  "resposta_humana": "uma resposta humana, amigável e profissional em português para o Willian, confirmando o que você vai fazer ou respondendo a dúvida dele de forma natural e empática"
 }
 """
     
@@ -364,25 +365,35 @@ def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_cal
     log(f"Intenção detectada: '{intencao}' (Empresa: '{empresa}')")
     
     # 4. Executar a Intenção
+    # Sempre enviar a resposta humana da IA primeiro se ela existir (para dar um tom natural e conversacional)
+    if resposta_humana:
+        enviar_mensagem_whatsapp(resposta_humana, config)
+        
     if intencao == "iniciar_varredura":
         if rodando_atualmente:
-            enviar_mensagem_whatsapp("🤖 O robô já está executando uma varredura no momento.", config)
+            if not resposta_humana:
+                enviar_mensagem_whatsapp("🤖 O robô já está executando uma varredura no momento.", config)
         else:
-            enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura inteligente comum agora em segundo plano. Vou te notificar do andamento.", config)
+            if not resposta_humana:
+                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura inteligente comum agora em segundo plano. Vou te notificar do andamento.", config)
             iniciar_callback(forcar_todos=False)
             
     elif intencao == "iniciar_varredura_total":
         if rodando_atualmente:
-            enviar_mensagem_whatsapp("🤖 O robô já está executando uma varredura. Interrompa a atual se quiser reiniciar do zero.", config)
+            if not resposta_humana:
+                enviar_mensagem_whatsapp("🤖 O robô já está executando uma varredura. Interrompa a atual se quiser reiniciar do zero.", config)
         else:
-            enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura completa (forçando todos) agora em segundo plano. Isso pode levar mais tempo.", config)
+            if not resposta_humana:
+                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura completa (forçando todos) agora em segundo plano. Isso pode levar mais tempo.", config)
             iniciar_callback(forcar_todos=True)
             
     elif intencao == "interromper_varredura":
         if not rodando_atualmente:
-            enviar_mensagem_whatsapp("🤖 Nenhuma varredura ativa para interromper no momento.", config)
+            if not resposta_humana:
+                enviar_mensagem_whatsapp("🤖 Nenhuma varredura ativa para interromper no momento.", config)
         else:
-            enviar_mensagem_whatsapp("🔴 *Parada Forçada:* Estou parando a automação e encerrando todos os navegadores abertos no servidor...", config)
+            if not resposta_humana:
+                enviar_mensagem_whatsapp("🔴 *Parada Forçada:* Estou parando a automação e encerrando todos os navegadores abertos no servidor...", config)
             parar_callback()
             enviar_mensagem_whatsapp("✅ Automação interrompida e limpa com sucesso!", config)
             
@@ -400,16 +411,16 @@ def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_cal
         
     elif intencao == "baixar_documento":
         if not empresa:
-            enviar_mensagem_whatsapp("🤖 Por favor, informe o nome do cliente. Exemplo: 'Me mande a certidão da Tome & Lopes'.", config)
+            if not resposta_humana:
+                enviar_mensagem_whatsapp("🤖 Por favor, informe o nome do cliente. Exemplo: 'Me mande a certidão da Tome & Lopes'.", config)
         else:
-            enviar_mensagem_whatsapp(f"🔍 Buscando arquivos fiscais de *{empresa}*...", config)
+            if not resposta_humana:
+                enviar_mensagem_whatsapp(f"🔍 Buscando arquivos fiscais de *{empresa}*...", config)
             msg_resposta = localizar_e_enviar_documento(empresa, config)
             enviar_mensagem_whatsapp(msg_resposta, config)
             
     elif intencao == "conversa_casual":
-        if resposta_humana:
-            enviar_mensagem_whatsapp(resposta_humana, config)
-        else:
+        if not resposta_humana:
             enviar_mensagem_whatsapp("🤖 Não consegui entender seu comando. Tente dizer 'iniciar varredura' ou 'status'.", config)
             
     return True
