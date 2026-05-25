@@ -313,20 +313,22 @@ def interpretar_mensagem_com_gpt(texto_mensagem, config, usuario_nome="Usuário"
         "Authorization": f"Bearer {openai_key}"
     }
     
-    prompt = f"""Você é o Agente Escavador, o assistente virtual inteligente da J&J Contabilidade que controla o sistema de automação e-CAC.
+    prompt = f"""Você é o Agente Escavador, o assistente virtual inteligente da J&J Contabilidade que controla o sistema de automação e-CAC e Consulta de Notas Fiscais XML.
 O usuário atual que está interagindo com você é o '{usuario_nome}' com o papel de '{usuario_role}'.
 Sua tarefa é analisar a mensagem do usuário, deduzir sua intenção operacional e gerar uma resposta em linguagem natural que seja extremamente humana, amigável, natural e adequada ao contexto.
 
 As intenções suportadas são:
-1. "iniciar_varredura" (Iniciar varredura comum do dia, ignorando quem já deu sucesso. Restrito a administradores e operadores)
-2. "iniciar_varredura_total" (Forçar escavação completa de todos os clientes do início. Restrito a administradores)
-3. "interromper_varredura" (Interromper ou parar a execução ativa do robô. Restrito a administradores)
-4. "obter_status" (Consultar status atual, progresso e logs do robô. Permitido a todos)
-5. "listar_clientes_ok" (Consultar lista de clientes com sucesso hoje. Permitido a todos)
-6. "listar_clientes_pendentes_erro" (Consultar lista de clientes com falhas ou pendentes hoje. Permitido a todos)
-7. "baixar_documento" (Baixar ou obter a certidão/relatório de um cliente específico. Requer o parâmetro 'empresa')
-8. "adicionar_cliente" (Adicionar um novo cliente/empresa ao sistema. Requer o nome completo em 'empresa' e o CNPJ/CPF em 'cnpj'. Restrito a administradores e operadores)
-9. "conversa_casual" (Outro tipo de mensagem, saudações ou dúvidas gerais)
+1. "iniciar_varredura" (Iniciar varredura comum do dia do e-CAC, ignorando quem já deu sucesso. Restrito a administradores e operadores)
+2. "iniciar_varredura_total" (Forçar escavação completa de todos os clientes do início do e-CAC. Restrito a administradores)
+3. "interromper_varredura" (Interromper ou parar a execução ativa do robô do e-CAC. Restrito a administradores)
+4. "iniciar_nota_fiscal_xml" (Iniciar varredura de Notas Fiscais XML no portal nacional. Restrito a administradores e operadores)
+5. "interromper_nota_fiscal_xml" (Interromper a varredura ativa de Notas Fiscais XML. Restrito a administradores)
+6. "obter_status" (Consultar status atual, progresso e logs do robô. Permitido a todos)
+7. "listar_clientes_ok" (Consultar lista de clientes com sucesso hoje. Permitido a todos)
+8. "listar_clientes_pendentes_erro" (Consultar lista de clientes com falhas ou pendentes hoje. Permitido a todos)
+9. "baixar_documento" (Baixar ou obter a certidão/relatório de um cliente específico. Requer o parâmetro 'empresa')
+10. "adicionar_cliente" (Adicionar um novo cliente/empresa ao sistema. Requer o nome completo em 'empresa' e o CNPJ/CPF em 'cnpj'. Restrito a administradores e operadores)
+11. "conversa_casual" (Outro tipo de mensagem, saudações ou dúvidas gerais)
 
 Retorne estritamente um JSON no seguinte formato (sem formatação markdown ou blocos de código):
 {{
@@ -346,7 +348,6 @@ Retorne estritamente um JSON no seguinte formato (sem formatação markdown ou b
         "temperature": 0.2,
         "response_format": {"type": "json_object"}
     }
-    
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=20)
         if response.status_code == 200:
@@ -362,47 +363,75 @@ Retorne estritamente um JSON no seguinte formato (sem formatação markdown ou b
 def interpretar_mensagem_heuristica(texto):
     t = texto.strip().lower()
     
-    # Heurística simples
-    if "parar" in t or "interromper" in t or "para" in t or "cancela" in t:
+    # Palavras de início e parada
+    iniciar_words = ["iniciar", "começar", "comecar", "rodar", "executar", "escavar"]
+    parar_words = ["parar", "interromper", "para", "cancela", "cancelar", "derrubar", "matar"]
+    
+    has_iniciar = any(w in t for w in iniciar_words)
+    has_parar = any(w in t for w in parar_words)
+    
+    # Heurística para Nota Fiscal XML
+    is_xml_related = any(w in t for w in ["xml", "nota", "nfe", "notas", "nota fiscal"])
+    
+    if is_xml_related and has_parar:
+        return {"intencao": "interromper_nota_fiscal_xml", "empresa": None, "cnpj": None, "resposta_humana": None}
+    elif has_parar:
         return {"intencao": "interromper_varredura", "empresa": None, "cnpj": None, "resposta_humana": None}
-    elif "status" in t or "como esta" in t or "como está" in t or "progresso" in t or "log" in t:
+        
+    elif "status" in t or "como esta" in t or "como está" in t or "progresso" in t or "log" in t or "relatorio" in t or "relatório" in t:
         return {"intencao": "obter_status", "empresa": None, "cnpj": None, "resposta_humana": None}
-    elif "todos" in t or "completo" in t or "forçar todos" in t or "do inicio" in t:
-        return {"intencao": "iniciar_varredura_total", "empresa": None, "cnpj": None, "resposta_humana": None}
-    elif "iniciar" in t or "começar" in t or "rodar" in t or "executar" in t:
-        return {"intencao": "iniciar_varredura", "empresa": None, "cnpj": None, "resposta_humana": None}
+        
+    elif is_xml_related and has_iniciar:
+        return {"intencao": "iniciar_nota_fiscal_xml", "empresa": None, "cnpj": None, "resposta_humana": None}
+        
+    elif has_iniciar:
+        has_todos = any(w in t for w in ["todos", "completo", "forçar", "forcar", "do inicio", "do início"])
+        if has_todos:
+            return {"intencao": "iniciar_varredura_total", "empresa": None, "cnpj": None, "resposta_humana": None}
+        # Para iniciar varredura comum do e-CAC, requer explicitamente contexto de varredura ou e-cac ou robô
+        # para evitar disparos com frases casuais como "como iniciar?"
+        elif any(w in t for w in ["varredura", "ecac", "e-cac", "robô", "robo", "processo"]):
+            return {"intencao": "iniciar_varredura", "empresa": None, "cnpj": None, "resposta_humana": None}
+            
     elif "inadimplente" in t or "falha" in t or "erro" in t or "pendente" in t:
         return {"intencao": "listar_clientes_pendentes_erro", "empresa": None, "cnpj": None, "resposta_humana": None}
     elif "ok" in t or "sucesso" in t or "regular" in t:
         return {"intencao": "listar_clientes_ok", "empresa": None, "cnpj": None, "resposta_humana": None}
     elif "adicionar" in t or "cadastrar" in t or "novo cliente" in t or "inserir" in t:
-        # Extrair potencial CNPJ/CPF da mensagem (apenas dígitos)
         numeros = "".join(filter(str.isdigit, texto))
         cnpj = numeros if len(numeros) in [11, 14] else None
-        
-        # Tentar extrair nome (tudo que não é verbo/número)
         palavras = [p for p in texto.split() if not p.isdigit()]
         empresa = None
         if len(palavras) > 2:
             empresa = " ".join(palavras[2:]) if "novo" in palavras else " ".join(palavras[1:])
         return {"intencao": "adicionar_cliente", "empresa": empresa, "cnpj": cnpj, "resposta_humana": None}
     elif "cnd" in t or "certidao" in t or "documento" in t or "relatorio" in t or "manda" in t or "envia" in t:
-        # Extrair potencial nome de empresa da frase
         palavras = texto.split()
         empresa = None
         if len(palavras) > 1:
-            # Pega as palavras após o comando básico
             empresa = " ".join(palavras[1:])
         return {"intencao": "baixar_documento", "empresa": empresa, "cnpj": None, "resposta_humana": None}
-    else:
-        return {
-            "intencao": "conversa_casual", 
-            "empresa": None, 
-            "cnpj": None,
-            "resposta_humana": "Olá! Sou o Agente Escavador da J&J Contabilidade. Consigo entender comandos como 'Iniciar varredura', 'Como está o status?', 'Lista de erros', 'Lista de sucessos', 'Parar automação' ou 'Me mande a certidão de [Nome da Empresa]'."
-        }
+        
+    return {
+        "intencao": "conversa_casual", 
+        "empresa": None, 
+        "cnpj": None,
+        "resposta_humana": "Olá! Sou o Agente Escavador da J&J Contabilidade. Consigo entender comandos como 'Iniciar varredura', 'Como está o status?', 'Lista de erros', 'Lista de sucessos', 'Parar automação' ou 'Me mande a certidão de [Nome da Empresa]'."
+    }
 
-def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_callback, parar_callback):
+def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_callback, parar_callback, iniciar_xml_callback=None, parar_xml_callback=None, processo_xml_ativo=False):
+    # Ignorar mensagens enviadas por mim (para evitar loops ou acionamentos acidentais)
+    from_me = payload.get("fromMe")
+    if from_me is True or str(from_me).lower() == "true":
+        log("Ignorando webhook de mensagem enviada pela própria conta (fromMe = True).", "INFO")
+        return False
+        
+    # Ignorar mensagens de grupo
+    is_group = payload.get("isGroup")
+    if is_group is True or str(is_group).lower() == "true":
+        log("Ignorando webhook de mensagem recebida em grupo.", "INFO")
+        return False
+
     sender_phone = payload.get("phone", "")
     if not sender_phone:
         return False
@@ -439,8 +468,8 @@ def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_cal
     log(f"Intenção detectada: '{intencao}' (Empresa: '{empresa}', CNPJ: '{cnpj}')")
     
     # Restrições de papel
-    restrito_admin = ["interromper_varredura", "iniciar_varredura_total"]
-    restrito_admin_operador = ["iniciar_varredura", "adicionar_cliente"]
+    restrito_admin = ["interromper_varredura", "iniciar_varredura_total", "interromper_nota_fiscal_xml"]
+    restrito_admin_operador = ["iniciar_varredura", "adicionar_cliente", "iniciar_nota_fiscal_xml"]
     
     if usuario_role == "agente":
         if intencao in restrito_admin or intencao in restrito_admin_operador:
@@ -467,30 +496,51 @@ def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_cal
     if intencao == "iniciar_varredura":
         if rodando_atualmente:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 O robô já está executando uma varredura no momento.", config, destinatario=sender_clean)
+                enviar_mensagem_whatsapp("🤖 O robô e-CAC já está executando uma varredura no momento.", config, destinatario=sender_clean)
         else:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura inteligente comum agora em segundo plano. Vou te notificar do andamento.", config, destinatario=sender_clean)
+                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura inteligente do e-CAC agora em segundo plano. Vou te notificar do andamento.", config, destinatario=sender_clean)
             iniciar_callback(forcar_todos=False)
             
     elif intencao == "iniciar_varredura_total":
         if rodando_atualmente:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 O robô já está executando uma varredura. Interrompa a atual se quiser reiniciar do zero.", config, destinatario=sender_clean)
+                enviar_mensagem_whatsapp("🤖 O robô e-CAC já está executando uma varredura. Interrompa a atual se quiser reiniciar do zero.", config, destinatario=sender_clean)
         else:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura completa (forçando todos) agora em segundo plano. Isso pode levar mais tempo.", config, destinatario=sender_clean)
+                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a varredura completa (forçando todos) do e-CAC agora em segundo plano. Isso pode levar mais tempo.", config, destinatario=sender_clean)
             iniciar_callback(forcar_todos=True)
             
     elif intencao == "interromper_varredura":
         if not rodando_atualmente:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 Nenhuma varredura ativa para interromper no momento.", config, destinatario=sender_clean)
+                enviar_mensagem_whatsapp("🤖 Nenhuma varredura do e-CAC ativa para interromper no momento.", config, destinatario=sender_clean)
         else:
             if not resposta_humana:
-                enviar_mensagem_whatsapp("🔴 *Parada Forçada:* Estou parando a automação e encerrando todos os navegadores abertos no servidor...", config, destinatario=sender_clean)
+                enviar_mensagem_whatsapp("🔴 *Parada Forçada:* Estou parando a automação e-CAC e encerrando os navegadores do e-CAC...", config, destinatario=sender_clean)
             parar_callback()
-            enviar_mensagem_whatsapp("✅ Automação interrompida e limpa com sucesso!", config, destinatario=sender_clean)
+            enviar_mensagem_whatsapp("✅ Automação e-CAC interrompida com sucesso!", config, destinatario=sender_clean)
+ 
+    elif intencao == "iniciar_nota_fiscal_xml":
+        if processo_xml_ativo:
+            if not resposta_humana:
+                enviar_mensagem_whatsapp("🤖 A consulta de Notas Fiscais XML já está rodando no momento.", config, destinatario=sender_clean)
+        else:
+            if not resposta_humana:
+                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a consulta de Notas Fiscais XML agora em segundo plano. Se houver CAPTCHAs, te avisarei aqui.", config, destinatario=sender_clean)
+            if iniciar_xml_callback:
+                iniciar_xml_callback(forcar_todos=False, destinatario=sender_clean)
+            
+    elif intencao == "interromper_nota_fiscal_xml":
+        if not processo_xml_ativo:
+            if not resposta_humana:
+                enviar_mensagem_whatsapp("🤖 Nenhuma consulta de Notas Fiscais XML ativa para interromper no momento.", config, destinatario=sender_clean)
+        else:
+            if not resposta_humana:
+                enviar_mensagem_whatsapp("🔴 *Parada Forçada:* Estou interrompendo o processo de Notas Fiscais XML...", config, destinatario=sender_clean)
+            if parar_xml_callback:
+                parar_xml_callback()
+            enviar_mensagem_whatsapp("✅ Processo de Notas Fiscais XML interrompido com sucesso!", config, destinatario=sender_clean)
             
     elif intencao == "obter_status":
         resumo = obter_status_resumo(config, rodando_atualmente)

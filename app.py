@@ -28,6 +28,7 @@ app = Flask(__name__)
 
 # Variáveis globais para gerenciar os subprocessos da automação e do gateway Node
 processo_automacao = None
+processo_nota_fiscal_xml = None
 processo_gateway = None
 
 def load_config():
@@ -133,6 +134,15 @@ def encerrar_servidor():
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_automacao.pid)], capture_output=True)
     except Exception as e:
         print(f"Erro ao parar a automação no encerramento: {e}")
+        
+    # 1b. Interromper a Nota Fiscal XML se estiver rodando
+    try:
+        global processo_nota_fiscal_xml
+        if processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None:
+            print("Encerrando processo de Nota Fiscal XML ativo...")
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_nota_fiscal_xml.pid)], capture_output=True)
+    except Exception as e:
+        print(f"Erro ao parar a Nota Fiscal XML no encerramento: {e}")
         
     # 2. Chamar parada explícita do gateway Node para não deixá-lo órfão
     try:
@@ -747,10 +757,12 @@ def iniciar_automacao():
     try:
         # Configurar startupinfo no Windows para evitar que o processo herde o estado oculto (SW_HIDE) da VBScript
         startupinfo = None
+        creationflags = 0
         if os.name == 'nt':
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startupinfo.wShowWindow = 1  # SW_SHOWNORMAL (1) - força as janelas (como o Chrome visível) a aparecerem
+            creationflags = subprocess.CREATE_NEW_CONSOLE
 
         # Iniciar o subprocesso de forma assíncrona, redirecionando saídas para evitar deadlock
         processo_automacao = subprocess.Popen(
@@ -758,7 +770,8 @@ def iniciar_automacao():
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             cwd=os.getcwd(),
-            startupinfo=startupinfo
+            startupinfo=startupinfo,
+            creationflags=creationflags
         )
         return jsonify({"status": "success", "message": "Automação iniciada com sucesso no servidor."})
     except Exception as e:
@@ -783,6 +796,123 @@ def parar_automacao():
     else:
         return jsonify({"status": "error", "message": "Nenhuma automação em execução no momento."}), 400
 
+# Rotas de Execução para Consulta de Nota Fiscal XML
+@app.route("/api/nota_fiscal_xml/iniciar", methods=["POST"])
+def iniciar_nota_fiscal_xml():
+    global processo_nota_fiscal_xml
+    
+    if processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None:
+        return jsonify({"status": "error", "message": "A consulta de Nota Fiscal XML já está em execução."}), 400
+        
+    dados = request.json or {}
+    forcar_todos = dados.get("forcar_todos", False)
+    
+    cmd = [sys.executable, "consultar_nota_fiscal_xml.py"]
+    if forcar_todos:
+        cmd.append("--forcar-todos")
+        
+    try:
+        startupinfo = None
+        creationflags = 0
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 1
+            creationflags = subprocess.CREATE_NEW_CONSOLE
+            
+        processo_nota_fiscal_xml = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=os.getcwd(),
+            startupinfo=startupinfo,
+            creationflags=creationflags
+        )
+        return jsonify({"status": "success", "message": "Consulta de Nota Fiscal XML iniciada com sucesso no servidor."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Erro ao iniciar o subprocesso: {str(e)}"}), 500
+ 
+@app.route("/api/nota_fiscal_xml/parar", methods=["POST"])
+def parar_nota_fiscal_xml():
+    global processo_nota_fiscal_xml
+    if processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None:
+        try:
+            import subprocess
+            # Fechar Chrome do perfil de Nota Fiscal XML antes do taskkill principal para liberar lock
+            cmd_chrome = (
+                'powershell -NoProfile -Command "'
+                'Get-CimInstance Win32_Process -Filter \\"Name = \'chrome.exe\' or Name = \'chromedriver.exe\'\\" '
+                '| Where-Object { $_.CommandLine -like \'*chrome_profile_nota_fiscal_xml*\' } '
+                '| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
+            )
+            subprocess.run(cmd_chrome, shell=True, capture_output=True)
+            
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_nota_fiscal_xml.pid)], capture_output=True)
+            processo_nota_fiscal_xml = None
+            
+            # Limpar SingletonLock
+            lock_path = os.path.join("temp", "chrome_profile_nota_fiscal_xml", "SingletonLock")
+            if os.path.exists(lock_path):
+                try:
+                    os.remove(lock_path)
+                except Exception:
+                    pass
+            return jsonify({"status": "success", "message": "Consulta de Nota Fiscal XML interrompida com sucesso!"})
+        except Exception as e:
+            try:
+                processo_nota_fiscal_xml.terminate()
+                processo_nota_fiscal_xml = None
+                return jsonify({"status": "success", "message": "Sinal de encerramento enviado."})
+            except Exception as ex:
+                return jsonify({"status": "error", "message": f"Erro ao encerrar processo: {str(ex)}"}), 500
+    else:
+        return jsonify({"status": "error", "message": "Nenhuma consulta de Nota Fiscal XML em execução no momento."}), 400
+ 
+@app.route("/api/nota_fiscal_xml/status", methods=["GET"])
+def obter_status_nota_fiscal_xml():
+    global processo_nota_fiscal_xml
+    rodando = processo_nota_fiscal_xml is not None and processo_nota_fiscal_xml.poll() is None
+    
+    state_file = "temp/state_nota_fiscal_xml.json"
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    status_data = {
+        "rodando": rodando,
+        "empresa_atual": "Inativo",
+        "total_clientes": 0,
+        "processados": 0,
+        "sucessos": 0,
+        "falhas": 0,
+        "logs": []
+    }
+    
+    if os.path.exists(state_file):
+        try:
+            with open(state_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get("data_consulta") == today:
+                    status_data.update(data)
+        except Exception:
+            pass
+            
+    status_data["rodando"] = rodando
+    if rodando and status_data["empresa_atual"] == "Inativo":
+        status_data["empresa_atual"] = "Inicializando..."
+    elif not rodando:
+        status_data["empresa_atual"] = "Inativo"
+        
+    log_file = os.path.join("logs", f"nota_fiscal_xml_{today}.log")
+    ultimo_log = []
+    if os.path.exists(log_file):
+        try:
+            with open(log_file, "r", encoding="utf-8", errors="ignore") as f_log:
+                lines = f_log.readlines()
+                ultimo_log = [line.strip() for line in lines[-150:]]
+        except Exception:
+            pass
+    status_data["logs"] = ultimo_log
+    
+    return jsonify(status_data)
+
 import threading
 
 @app.route("/api/webhook/whatsapp", methods=["POST"])
@@ -795,6 +925,7 @@ def webhook_whatsapp():
             import agente_escavador
             config = load_config()
             rodando = processo_automacao is not None and processo_automacao.poll() is None
+            rodando_nota_fiscal_xml = processo_nota_fiscal_xml is not None and processo_nota_fiscal_xml.poll() is None
             
             def iniciar_callback(forcar_todos=False):
                 global processo_automacao
@@ -805,17 +936,20 @@ def webhook_whatsapp():
                     cmd.append("--forcar-todos")
                     
                 startupinfo = None
+                creationflags = 0
                 if os.name == 'nt':
                     startupinfo = subprocess.STARTUPINFO()
                     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                     startupinfo.wShowWindow = 1
+                    creationflags = subprocess.CREATE_NEW_CONSOLE
                     
                 processo_automacao = subprocess.Popen(
                     cmd,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     cwd=os.getcwd(),
-                    startupinfo=startupinfo
+                    startupinfo=startupinfo,
+                    creationflags=creationflags
                 )
                 return True
                 
@@ -834,13 +968,69 @@ def webhook_whatsapp():
                         except Exception:
                             pass
                 return False
+
+            def iniciar_xml_callback(forcar_todos=False, destinatario=None):
+                global processo_nota_fiscal_xml
+                if processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None:
+                    return False
+                cmd = [sys.executable, "consultar_nota_fiscal_xml.py"]
+                if forcar_todos:
+                    cmd.append("--forcar-todos")
+                if destinatario:
+                    cmd.extend(["--destinatario", destinatario])
+                    
+                startupinfo = None
+                creationflags = 0
+                if os.name == 'nt':
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = 1
+                    creationflags = subprocess.CREATE_NEW_CONSOLE
+                    
+                processo_nota_fiscal_xml = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    cwd=os.getcwd(),
+                    startupinfo=startupinfo,
+                    creationflags=creationflags
+                )
+                return True
+                
+            def parar_xml_callback():
+                global processo_nota_fiscal_xml
+                if processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None:
+                    try:
+                        import subprocess
+                        cmd_chrome = (
+                            'powershell -NoProfile -Command "'
+                            'Get-CimInstance Win32_Process -Filter \\"Name = \'chrome.exe\' or Name = \'chromedriver.exe\'\\" '
+                            '| Where-Object { $_.CommandLine -like \'*chrome_profile_nota_fiscal_xml*\' } '
+                            '| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
+                        )
+                        subprocess.run(cmd_chrome, shell=True, capture_output=True)
+                        
+                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_nota_fiscal_xml.pid)], capture_output=True)
+                        processo_nota_fiscal_xml = None
+                        return True
+                    except Exception:
+                        try:
+                            processo_nota_fiscal_xml.terminate()
+                            processo_nota_fiscal_xml = None
+                            return True
+                        except Exception:
+                            pass
+                return False
                 
             agente_escavador.processar_mensagem_recebida(
-                dados,
-                config,
-                rodando,
-                iniciar_callback,
-                parar_callback
+                payload=dados,
+                config=config,
+                rodando_atualmente=rodando,
+                iniciar_callback=iniciar_callback,
+                parar_callback=parar_callback,
+                iniciar_xml_callback=iniciar_xml_callback,
+                parar_xml_callback=parar_xml_callback,
+                processo_xml_ativo=rodando_nota_fiscal_xml
             )
         except Exception as e:
             print(f"Erro no processamento assíncrono do webhook: {e}")
@@ -1052,8 +1242,87 @@ def listar_relatorios():
                     
     # Ordenar por data de modificação decrescente
     try:
-        # Converter string da data de volta para datetime para ordenação correta se possível,
-        # ou apenas ordenar por string invertida
+        relatorios_list.sort(key=lambda x: x["data_mod"], reverse=True)
+    except Exception:
+        pass
+        
+    return jsonify(relatorios_list)
+
+@app.route("/api/nota_fiscal_xml/relatorios", methods=["GET"])
+def listar_relatorios_nota_fiscal_xml():
+    relatorios_list = []
+    
+    # 1. Adicionar o Painel Consolidado do Desktop
+    desktop_excel = r"C:\Users\jejco\Desktop\nota_fiscal_xml.xlsx"
+    if os.path.exists(desktop_excel):
+        try:
+            size = os.path.getsize(desktop_excel)
+            mtime = os.path.getmtime(desktop_excel)
+            dt_mod = datetime.datetime.fromtimestamp(mtime).strftime("%d/%m/%Y %H:%M")
+            relatorios_list.append({
+                "nome": "nota_fiscal_xml.xlsx",
+                "caminho": "desktop/nota_fiscal_xml.xlsx",
+                "tamanho": f"{size / 1024:.1f} KB",
+                "data_mod": dt_mod,
+                "empresa": "Geral (Consolidado Nota Fiscal XML)",
+                "data_pasta": "N/A",
+                "tipo": "excel",
+                "cnpj": ""
+            })
+        except Exception:
+            pass
+            
+    # 2. Varrer recursivamente a pasta documentos de nota fiscal xml/
+    target_dir = "documentos de nota fiscal xml"
+    if os.path.exists(target_dir):
+        for root, dirs, files in os.walk(target_dir):
+            for file in files:
+                if file.endswith(".json") or file.endswith(".tmp"):
+                    continue
+                    
+                filepath = os.path.join(root, file)
+                try:
+                    size = os.path.getsize(filepath)
+                    mtime = os.path.getmtime(filepath)
+                    dt_mod = datetime.datetime.fromtimestamp(mtime).strftime("%d/%m/%Y %H:%M")
+                    
+                    # Obter caminho relativo
+                    rel_path = os.path.relpath(filepath, target_dir)
+                    parts = rel_path.split(os.sep)
+                    
+                    if len(parts) <= 1:
+                        continue
+                        
+                    empresa_raw = parts[0]
+                    data_pasta = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m")
+                    
+                    cnpj = ""
+                    empresa = empresa_raw
+                    if "_" in empresa_raw:
+                        cnpj_parte, nome_parte = empresa_raw.split("_", 1)
+                        if cnpj_parte.isdigit() and len(cnpj_parte) in [11, 14]:
+                            cnpj = cnpj_parte
+                            empresa = nome_parte.replace("_", " ").strip()
+                            
+                    if not cnpj:
+                        empresa = empresa.replace("_", " ").strip()
+                        
+                    caminho_web = "nota_fiscal_xml/" + rel_path.replace('\\', '/')
+                    relatorios_list.append({
+                        "nome": file,
+                        "caminho": caminho_web,
+                        "tamanho": f"{size / (1024 * 1024):.2f} MB" if size > 1024*1024 else f"{size / 1024:.1f} KB",
+                        "data_mod": dt_mod,
+                        "empresa": empresa,
+                        "data_pasta": data_pasta,
+                        "tipo": "excel" if file.endswith(".xlsx") else "xml" if file.endswith(".xml") else "pdf" if file.endswith(".pdf") else "imagem" if file.endswith(".png") else "texto" if file.endswith(".txt") else "outro",
+                        "cnpj": cnpj
+                    })
+                except Exception:
+                    pass
+                    
+    # Ordenar por data de modificação decrescente
+    try:
         relatorios_list.sort(key=lambda x: x["data_mod"], reverse=True)
     except Exception:
         pass
@@ -1064,13 +1333,24 @@ def listar_relatorios():
 def baixar_relatorio(caminho_completo):
     config = load_config()
     
-    # Se o caminho for do desktop
+    # Se o caminho for do desktop para e-CAC
     if caminho_completo == "desktop/Painel_Consolidado_Pendencias_eCAC.xlsx":
         desktop_excel = r"C:\Users\jejco\Desktop\Painel_Consolidado_Pendencias_eCAC.xlsx"
         if os.path.exists(desktop_excel):
             return send_file(desktop_excel, as_attachment=True)
         else:
-            return jsonify({"status": "error", "message": "Arquivo consolidado não encontrado no Desktop."}), 404
+            return jsonify({"status": "error", "message": "Arquivo consolidado e-CAC não encontrado no Desktop."}), 404
+
+    # Se o caminho for do desktop para Nota Fiscal XML
+    if caminho_completo == "desktop/nota_fiscal_xml.xlsx":
+        desktop_excel = r"C:\Users\jejco\Desktop\nota_fiscal_xml.xlsx"
+        if os.path.exists(desktop_excel):
+            return send_file(desktop_excel, as_attachment=True)
+        else:
+            # Fallback para o arquivo no diretório raiz do projeto
+            if os.path.exists("nota_fiscal_xml.xlsx"):
+                return send_file("nota_fiscal_xml.xlsx", as_attachment=True)
+            return jsonify({"status": "error", "message": "Arquivo consolidado Nota Fiscal XML não encontrado."}), 404
             
     # Se for da pasta de relatórios
     if caminho_completo.startswith("relatorio/"):
@@ -1088,6 +1368,22 @@ def baixar_relatorio(caminho_completo):
             return send_file(abs_target, as_attachment=True)
         else:
             return jsonify({"status": "error", "message": "Arquivo de relatório não encontrado."}), 404
+ 
+    # Se for da pasta de nota fiscal xml
+    if caminho_completo.startswith("nota_fiscal_xml/"):
+        target_dir = "documentos de nota fiscal xml"
+        caminho_rel = caminho_completo.replace("nota_fiscal_xml/", "")
+        
+        abs_nota_fiscal_xml = os.path.abspath(target_dir)
+        abs_target = os.path.abspath(os.path.join(target_dir, caminho_rel))
+        
+        if not abs_target.startswith(abs_nota_fiscal_xml):
+            return jsonify({"status": "error", "message": "Acesso não autorizado."}), 403
+            
+        if os.path.exists(abs_target):
+            return send_file(abs_target, as_attachment=True)
+        else:
+            return jsonify({"status": "error", "message": "Arquivo de Nota Fiscal XML não encontrado."}), 404
             
     return jsonify({"status": "error", "message": "Caminho de download inválido."}), 400
 

@@ -29,6 +29,8 @@
             --primary: #3a86c8;
             --primary-hover: #4ea8de;
             --accent: #5bc0be;
+            --accent-purple: #8e44ad;
+            --accent-purple-hover: #9b59b6;
             --text-color: #f4f6f9;
             --text-muted: #8e9aaf;
             --success: #38b000;
@@ -608,6 +610,12 @@
             border: 1px solid rgba(58, 134, 200, 0.3);
         }
 
+        .badge-primary {
+            background-color: rgba(142, 68, 173, 0.15);
+            color: #af7ac5;
+            border: 1px solid rgba(142, 68, 173, 0.3);
+        }
+
         /* Configuration Forms Grid */
         .form-grid {
             display: grid;
@@ -879,13 +887,22 @@
                     Gerenciar Clientes
                 </button>
             </li>
+            <li class="nav-item" id="nav-nota-fiscal-xml-downloads">
+                <button onclick="switchTab('nota-fiscal-xml-downloads')">
+                    <svg viewBox="0 0 24 24">
+                        <path fill="currentColor"
+                            d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" style="color: var(--accent-purple, #8E44AD);" />
+                    </svg>
+                    Nota Fiscal XML
+                </button>
+            </li>
             <li class="nav-item" id="nav-relatorios">
                 <button onclick="switchTab('relatorios')">
                     <svg viewBox="0 0 24 24">
                         <path
                             d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" />
                     </svg>
-                    Downloads
+                    Downloads E-CAC
                 </button>
             </li>
             <li class="nav-item" id="nav-config">
@@ -1006,14 +1023,15 @@
                 </div>
             </div>
 
-            <!-- Execution Actions -->
-            <div class="card">
+            <!-- Execution Actions: E-CAC -->
+            <div class="card" style="margin-bottom: 20px;">
                 <div class="controls-row">
-                    <div style="flex-grow: 1;">
-                        <h3 id="lbl-empresa-atual" style="font-size: 1.1rem; margin-bottom: 4px;">Aguardando ação...
-                        </h3>
-                        <p id="lbl-detalhes-progresso" style="color: var(--text-muted); font-size: 0.85rem;">Nenhum
-                            processo ativo no momento.</p>
+                    <div style="flex-grow: 1; display: flex; align-items: center; gap: 20px;">
+                        <div>
+                            <h3 id="lbl-empresa-atual" style="font-size: 1.1rem; margin-bottom: 4px;">Aguardando ação...</h3>
+                            <p id="lbl-detalhes-progresso" style="color: var(--text-muted); font-size: 0.85rem;">Nenhum processo ativo no momento.</p>
+                        </div>
+                        <div style="font-size: 1.2rem; font-weight: 700; color: #3a86c8; margin-left: auto; margin-right: 40px; font-family: 'Inter', sans-serif;">E-CAC</div>
                     </div>
                     <div class="action-btns">
                         <button class="btn btn-primary" id="btn-iniciar" onclick="iniciarAutomacao(false, false)">
@@ -1034,17 +1052,60 @@
                             title="Forçar abertura do navegador para login inicial manual caso o token tenha expirado">
                             Forçar Login Manual
                         </button>
-                        <button class="btn btn-danger" id="btn-parar" onclick="pararAutomacao()" style="display: none;">
+                        <button class="btn btn-danger" id="btn-parar" onclick="pararAutomacao()">
                             <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24">
                                 <path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                             </svg>
-                            Interromper
+                            Parar Processo
                         </button>
                     </div>
                 </div>
 
-                <div class="progress-container">
+                <div class="progress-container" style="margin-top: 15px;">
                     <div class="progress-bar" id="progress-bar-val"></div>
+                </div>
+            </div>
+
+            <!-- Execution Actions: Nota Fiscal XML -->
+            <div class="card" style="margin-bottom: 20px; border-left: 4px solid var(--accent-purple, #8E44AD);">
+                <div class="controls-row">
+                    <div style="flex-grow: 1; display: flex; align-items: center; gap: 20px;">
+                        <div>
+                            <h3 id="lbl-empresa-atual-xml" style="font-size: 1.1rem; margin-bottom: 4px;">Aguardando ação...</h3>
+                            <p id="lbl-detalhes-progresso-xml" style="color: var(--text-muted); font-size: 0.85rem;">Nenhum processo ativo no momento.</p>
+                        </div>
+                        <div style="font-size: 1.2rem; font-weight: 700; color: #8e44ad; margin-left: auto; margin-right: 40px; font-family: 'Inter', sans-serif;">Nota Fiscal XML</div>
+                    </div>
+                    <div class="action-btns">
+                        <button class="btn btn-primary" id="btn-iniciar-xml" onclick="iniciarAutomacaoXml(false)" style="background-color: var(--accent-purple, #8E44AD); border-color: var(--accent-purple, #8E44AD);">
+                            <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M8 5v14l11-7z" />
+                            </svg>
+                            Iniciar Varredura
+                        </button>
+                        <button class="btn btn-warning" id="btn-iniciar-todos-xml" onclick="iniciarAutomacaoXml(true)"
+                            title="Forçar consulta completa de todos os clientes do início para Nota Fiscal XML">
+                            <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24">
+                                <path fill="currentColor"
+                                    d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4c-4.42 0-8 3.58-8 8H1l4 4 4-4H6z" />
+                            </svg>
+                            Escavar Todos do Início
+                        </button>
+                        <button class="btn btn-secondary" id="btn-iniciar-login-xml" onclick="void(0)" disabled
+                            title="Não requer login manual. O Chrome abrirá automaticamente em modo visível.">
+                            Forçar Login Manual
+                        </button>
+                        <button class="btn btn-danger" id="btn-parar-xml" onclick="pararAutomacaoXml()">
+                            <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                            </svg>
+                            Parar Processo
+                        </button>
+                    </div>
+                </div>
+
+                <div class="progress-container" style="margin-top: 15px;">
+                    <div class="progress-bar" id="progress-bar-val-xml" style="background-color: var(--accent-purple, #8E44AD);"></div>
                 </div>
             </div>
 
@@ -1052,8 +1113,12 @@
             <div class="card">
                 <div class="controls-row">
                     <h3>Visualizador de Logs do Terminal (Tempo Real)</h3>
-                    <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;"
-                        onclick="limparTerminalGrafico()">Limpar Tela</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" id="btn-log-ecac" onclick="setLogTab('ecac')" style="padding: 6px 12px; font-size: 0.8rem; background-color: var(--primary); color: #ffffff;">e-CAC</button>
+                        <button class="btn btn-secondary" id="btn-log-xml" onclick="setLogTab('xml')" style="padding: 6px 12px; font-size: 0.8rem; color: var(--text-color);">Nota Fiscal XML</button>
+                        <button type="button" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;"
+                            onclick="limparTerminalGrafico(event)">Limpar Tela</button>
+                    </div>
                 </div>
                 <div class="terminal-card" id="terminal-screen">
                     <div class="terminal-line system">Console aguardando inicialização da rotina...</div>
@@ -1113,11 +1178,74 @@
             </div>
         </section>
 
+        <!-- NOTA FISCAL XML DOWNLOADS TAB -->
+        <section class="tab-panel" id="panel-nota-fiscal-xml-downloads">
+            <div class="section-header">
+                <h2>Downloads de Nota Fiscal XML</h2>
+                <p>Acesse os arquivos XML e PDF de Nota Fiscal XML baixados do Portal Nacional da NF-e.</p>
+            </div>
+
+            <!-- Consolidated Highlight -->
+            <div class="card"
+                style="background: linear-gradient(135deg, rgba(142, 68, 173, 0.2), rgba(155, 89, 182, 0.05)); border: 1px solid rgba(142, 68, 173, 0.3);">
+                <div class="controls-row">
+                    <div>
+                        <h3 style="color: #ffffff; font-size: 1.2rem; margin-bottom: 4px;">Planilha Excel para Baixar</h3>
+                        <p style="color: var(--text-muted); font-size: 0.9rem;">planilha resumo dos processos de Nota Fiscal XML</p>
+                    </div>
+                    <button class="btn btn-primary" id="btn-download-consolidado-xml"
+                        onclick="baixarArquivo('desktop/nota_fiscal_xml.xlsx')" style="background-color: var(--accent-purple, #8E44AD); border-color: var(--accent-purple, #8E44AD);">
+                        <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24">
+                            <path fill="currentColor"
+                                d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z" />
+                        </svg>
+                        Baixar Excel Consolidado
+                    </button>
+                </div>
+            </div>
+
+            <!-- Document list table -->
+            <div class="card">
+                <div class="controls-row">
+                    <h3>Arquivos Individuais Gerados (XMLs e PDFs)</h3>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" class="form-input" id="search-xml"
+                            placeholder="Filtrar por empresa ou data..." oninput="filtrarRelatoriosXml()"
+                            style="width: 250px;">
+                        <button class="btn btn-secondary" onclick="carregarRelatoriosXml()" title="Atualizar Lista">
+                            Atualizar Lista
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nome do Arquivo</th>
+                                <th>Empresa</th>
+                                <th>Data da Pasta</th>
+                                <th>Modificado em</th>
+                                <th>Tamanho</th>
+                                <th style="text-align: right;">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl-xml-corpo">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                    Carregando lista de Notas Fiscais XML...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
         <!-- REPORTS TAB -->
         <section class="tab-panel" id="panel-relatorios">
             <div class="section-header">
-                <h2>Downloads e Relatórios</h2>
-                <p>Acesse o painel consolidado do Desktop e baixe relatórios/CNDs individuais gerados pela automação.
+                <h2>Downloads Certidões e Relatórios E-CAC</h2>
+                <p>Acesse os arquivos gerados pela automação: E-CAC e Relatórios de Pendências, Consultas de Nota Fiscal XML.
                 </p>
             </div>
 
@@ -1126,10 +1254,9 @@
                 style="background: linear-gradient(135deg, rgba(58, 134, 200, 0.2), rgba(91, 192, 190, 0.05)); border: 1px solid rgba(58, 134, 200, 0.3);">
                 <div class="controls-row">
                     <div>
-                        <h3 style="color: #ffffff; font-size: 1.2rem; margin-bottom: 4px;">Painel Consolidado do Desktop
+                        <h3 style="color: #ffffff; font-size: 1.2rem; margin-bottom: 4px;">Planilha Excel para Baixar
                         </h3>
-                        <p style="color: var(--text-muted); font-size: 0.9rem;">Esta planilha contém o resumo final
-                            e-CAC de todas as empresas e é atualizada automaticamente a cada execução.</p>
+                        <p style="color: var(--text-muted); font-size: 0.9rem;">Aqui contem o resumo final dos Dowloads do E-CAC por Certificado e Relatórios de Pendências.</p>
                     </div>
                     <button class="btn btn-primary" id="btn-download-consolidado"
                         onclick="baixarArquivo('desktop/Painel_Consolidado_Pendencias_eCAC.xlsx')">
@@ -1511,18 +1638,27 @@
         let statusIntervalId = null;
         let listaClientesCache = [];
         let listaRelatoriosCache = [];
+        let listaRelatoriosXmlCache = [];
         let logsIgnoradosCount = 0;
+        let logsXmlIgnoradosCount = 0;
         let ultimoTamanhoLogs = 0;
+        let ultimoTamanhoLogsXml = 0;
+        let activeLogTab = 'ecac';
 
         // Inicializar aplicação
         window.addEventListener('DOMContentLoaded', () => {
             carregarClientes();
             carregarRelatorios();
+            carregarRelatoriosXml();
             carregarConfig();
 
             // Iniciar o monitoramento de status recorrente (a cada 2 segundos)
             obterStatusRobo();
-            statusIntervalId = setInterval(obterStatusRobo, 2000);
+            obterStatusRoboXml();
+            statusIntervalId = setInterval(() => {
+                obterStatusRobo();
+                obterStatusRoboXml();
+            }, 2000);
 
             // Iniciar o monitoramento de status do WhatsApp (a cada 3 segundos)
             obterStatusWhatsapp();
@@ -1667,6 +1803,8 @@
                 carregarClientes();
             } else if (tabId === 'relatorios') {
                 carregarRelatorios();
+            } else if (tabId === 'nota-fiscal-xml-downloads') {
+                carregarRelatoriosXml();
             } else if (tabId === 'autorizados') {
                 carregarContatosAutorizados();
             }
@@ -1711,7 +1849,7 @@
                     btnIniciar.style.display = 'inline-flex';
                     if (btnIniciarTodos) btnIniciarTodos.style.display = 'inline-flex';
                     btnIniciarLogin.style.display = 'inline-flex';
-                    btnParar.style.display = 'none';
+                    btnParar.style.display = 'inline-flex';
                 }
 
                 // Atualizar Estatísticas
@@ -1735,46 +1873,48 @@
                 }
 
                 // Alimentar Terminal de Logs de forma acumulada e incremental
-                const term = document.getElementById('terminal-screen');
-                if (status.logs && status.logs.length > 0) {
-                    ultimoTamanhoLogs = status.logs.length;
-                    if (status.logs.length < logsIgnoradosCount) {
+                if (activeLogTab === 'ecac') {
+                    const term = document.getElementById('terminal-screen');
+                    if (status.logs && status.logs.length > 0) {
+                        ultimoTamanhoLogs = status.logs.length;
+                        if (status.logs.length < logsIgnoradosCount) {
+                            logsIgnoradosCount = 0;
+                        }
+
+                        const isScrolledToBottom = term.scrollHeight - term.clientHeight <= term.scrollTop + 50;
+
+                        term.innerHTML = '';
+                        const logsParaRenderizar = status.logs.slice(logsIgnoradosCount);
+
+                        if (logsParaRenderizar.length === 0) {
+                            term.innerHTML = '<div class="terminal-line system">Terminal limpo. Aguardando novos logs...</div>';
+                        } else {
+                            logsParaRenderizar.forEach(line => {
+                                const div = document.createElement('div');
+                                div.className = 'terminal-line';
+
+                                // Formatar níveis de log por cores
+                                if (line.includes('[SUCCESS]')) div.classList.add('success');
+                                else if (line.includes('[ERROR]')) div.classList.add('error');
+                                else if (line.includes('[WARNING]')) div.classList.add('warning');
+                                else if (line.includes('[SYSTEM]')) div.classList.add('system');
+                                else if (line.includes('[ACTION]')) div.classList.add('action');
+                                else if (line.includes('[SUMMARY]')) div.classList.add('summary');
+                                else div.classList.add('info');
+
+                                div.innerText = line;
+                                term.appendChild(div);
+                            });
+                        }
+
+                        // Rolagem automática
+                        if (isScrolledToBottom) {
+                            term.scrollTop = term.scrollHeight;
+                        }
+                    } else {
+                        ultimoTamanhoLogs = 0;
                         logsIgnoradosCount = 0;
                     }
-
-                    const isScrolledToBottom = term.scrollHeight - term.clientHeight <= term.scrollTop + 50;
-
-                    term.innerHTML = '';
-                    const logsParaRenderizar = status.logs.slice(logsIgnoradosCount);
-
-                    if (logsParaRenderizar.length === 0) {
-                        term.innerHTML = '<div class="terminal-line system">Terminal limpo. Aguardando novos logs...</div>';
-                    } else {
-                        logsParaRenderizar.forEach(line => {
-                            const div = document.createElement('div');
-                            div.className = 'terminal-line';
-
-                            // Formatar níveis de log por cores
-                            if (line.includes('[SUCCESS]')) div.classList.add('success');
-                            else if (line.includes('[ERROR]')) div.classList.add('error');
-                            else if (line.includes('[WARNING]')) div.classList.add('warning');
-                            else if (line.includes('[SYSTEM]')) div.classList.add('system');
-                            else if (line.includes('[ACTION]')) div.classList.add('action');
-                            else if (line.includes('[SUMMARY]')) div.classList.add('summary');
-                            else div.classList.add('info');
-
-                            div.innerText = line;
-                            term.appendChild(div);
-                        });
-                    }
-
-                    // Rolagem automática
-                    if (isScrolledToBottom) {
-                        term.scrollTop = term.scrollHeight;
-                    }
-                } else {
-                    ultimoTamanhoLogs = 0;
-                    logsIgnoradosCount = 0;
                 }
             } catch (err) {
                 console.error("Erro ao verificar status do robô:", err);
@@ -1818,8 +1958,13 @@
             }
         }
 
-        function limparTerminalGrafico() {
-            logsIgnoradosCount = ultimoTamanhoLogs;
+        function limparTerminalGrafico(event) {
+            if (event) event.preventDefault();
+            if (activeLogTab === 'ecac') {
+                logsIgnoradosCount = ultimoTamanhoLogs;
+            } else {
+                logsXmlIgnoradosCount = ultimoTamanhoLogsXml;
+            }
             document.getElementById('terminal-screen').innerHTML = '<div class="terminal-line system">Terminal limpo. Aguardando novos logs...</div>';
         }
 
@@ -2335,6 +2480,213 @@
 
         function baixarArquivo(caminhoCompleto) {
             window.open(`/api/relatorios/download/${caminhoCompleto}`, '_blank');
+        }
+
+        /* --- NOTA FISCAL XML DASHBOARD & DOWNLOADS LOGIC --- */
+        async function iniciarAutomacaoXml(forcarTodos = false) {
+            try {
+                showToast("Iniciando consulta de Nota Fiscal XML no servidor...", "warning");
+                const response = await fetch('/api/nota_fiscal_xml/iniciar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ forcar_todos: forcarTodos })
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                    obterStatusRoboXml();
+                } else {
+                    showToast(res.message, "error");
+                }
+            } catch (err) {
+                showToast("Falha de rede ao tentar iniciar consulta de Nota Fiscal XML.", "error");
+            }
+        }
+
+        async function pararAutomacaoXml() {
+            if (!confirm("Tem certeza que deseja interromper a consulta de Nota Fiscal XML? O processo em andamento será encerrado imediatamente.")) return;
+            try {
+                showToast("Enviando comando de interrupção...", "warning");
+                const response = await fetch('/api/nota_fiscal_xml/parar', { method: 'POST' });
+                const res = await response.json();
+                if (response.ok) {
+                    showToast(res.message, "success");
+                    obterStatusRoboXml();
+                } else {
+                    showToast(res.message, "error");
+                }
+            } catch (err) {
+                showToast("Falha de rede ao tentar interromper consulta de Nota Fiscal XML.", "error");
+            }
+        }
+
+        async function obterStatusRoboXml() {
+            try {
+                const response = await fetch('/api/nota_fiscal_xml/status');
+                if (!response.ok) return;
+                const status = await response.json();
+
+                const btnIniciar = document.getElementById('btn-iniciar-xml');
+                const btnIniciarTodos = document.getElementById('btn-iniciar-todos-xml');
+                const btnParar = document.getElementById('btn-parar-xml');
+
+                if (status.rodando) {
+                    btnIniciar.style.display = 'none';
+                    if (btnIniciarTodos) btnIniciarTodos.style.display = 'none';
+                    btnParar.style.display = 'inline-flex';
+                } else {
+                    btnIniciar.style.display = 'inline-flex';
+                    if (btnIniciarTodos) btnIniciarTodos.style.display = 'inline-flex';
+                    btnParar.style.display = 'inline-flex';
+                }
+
+                // Atualizar progresso e barra
+                const total = status.total_clientes || 1;
+                const proc = status.processados || 0;
+                const pct = Math.min(100, Math.round((proc / total) * 100));
+
+                document.getElementById('progress-bar-val-xml').style.width = `${pct}%`;
+
+                if (status.rodando) {
+                    document.getElementById('lbl-empresa-atual-xml').innerText = `Processando: ${status.empresa_atual}`;
+                    document.getElementById('lbl-detalhes-progresso-xml').innerText = `Empresa ${proc} de ${total} (${pct}% concluído) | Sucessos: ${status.sucessos} - Falhas: ${status.falhas}`;
+                } else {
+                    document.getElementById('lbl-empresa-atual-xml').innerText = 'Aguardando início...';
+                    document.getElementById('lbl-detalhes-progresso-xml').innerText = `Último status: ${proc} de ${total} processados.`;
+                }
+
+                // Alimentar Terminal de Logs se estiver na aba Nota Fiscal XML
+                if (activeLogTab === 'xml') {
+                    const term = document.getElementById('terminal-screen');
+                    if (status.logs && status.logs.length > 0) {
+                        ultimoTamanhoLogsXml = status.logs.length;
+                        if (status.logs.length < logsXmlIgnoradosCount) {
+                            logsXmlIgnoradosCount = 0;
+                        }
+
+                        const isScrolledToBottom = term.scrollHeight - term.clientHeight <= term.scrollTop + 50;
+
+                        term.innerHTML = '';
+                        const logsParaRenderizar = status.logs.slice(logsXmlIgnoradosCount);
+
+                        if (logsParaRenderizar.length === 0) {
+                            term.innerHTML = '<div class="terminal-line system">Terminal limpo. Aguardando novos logs...</div>';
+                        } else {
+                            logsParaRenderizar.forEach(line => {
+                                const div = document.createElement('div');
+                                div.className = 'terminal-line';
+
+                                if (line.includes('[SUCCESS]')) div.classList.add('success');
+                                else if (line.includes('[ERROR]')) div.classList.add('error');
+                                else if (line.includes('[WARNING]')) div.classList.add('warning');
+                                else if (line.includes('[SYSTEM]')) div.classList.add('system');
+                                else if (line.includes('[ACTION]')) div.classList.add('action');
+                                else if (line.includes('[SUMMARY]')) div.classList.add('summary');
+                                else div.classList.add('info');
+
+                                div.innerText = line;
+                                term.appendChild(div);
+                            });
+                        }
+
+                        if (isScrolledToBottom) {
+                            term.scrollTop = term.scrollHeight;
+                        }
+                    } else {
+                        ultimoTamanhoLogsXml = 0;
+                        logsXmlIgnoradosCount = 0;
+                    }
+                }
+            } catch (err) {
+                console.error("Erro ao verificar status da Nota Fiscal XML:", err);
+            }
+        }
+
+        async function carregarRelatoriosXml() {
+            try {
+                const response = await fetch('/api/nota_fiscal_xml/relatorios');
+                if (!response.ok) return;
+                listaRelatoriosXmlCache = await response.json();
+                renderizarTabelaRelatoriosXml(listaRelatoriosXmlCache);
+            } catch (err) {
+                showToast("Erro ao carregar arquivos de Nota Fiscal XML.", "error");
+            }
+        }
+
+        function renderizarTabelaRelatoriosXml(arquivos) {
+            const tbody = document.getElementById('tbl-xml-corpo');
+            if (arquivos.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">Nenhum documento individual de Nota Fiscal XML gerado ainda.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+
+            const individuais = arquivos.filter(x => x.caminho !== "desktop/nota_fiscal_xml.xlsx");
+
+            if (individuais.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">Nenhum arquivo individual gerado.</td></tr>';
+                return;
+            }
+
+            individuais.forEach(arq => {
+                const tr = document.createElement('tr');
+
+                let badgeClass = 'badge-success';
+                let docType = 'XML';
+                if (arq.nome.toLowerCase().endsWith('.pdf')) { badgeClass = 'badge-primary'; docType = 'PDF'; }
+                else if (arq.nome.includes('erro_') || arq.nome.toLowerCase().endsWith('.png')) { badgeClass = 'badge-danger'; docType = 'ERRO'; }
+                else if (arq.nome.toLowerCase().endsWith('.txt')) { badgeClass = 'badge-info'; docType = 'TXT'; }
+
+                const cnpjExibir = arq.cnpj ? formatCnpj(arq.cnpj) : 'Sem CNPJ/CPF';
+                tr.innerHTML = `
+                    <td>
+                        <span class="badge ${badgeClass}" style="margin-right: 8px;">${docType}</span>
+                        ${arq.nome}
+                    </td>
+                    <td>
+                        <div style="font-weight: 500;">${arq.empresa}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px;">${cnpjExibir}</div>
+                    </td>
+                    <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">${arq.data_pasta}</td>
+                    <td>${arq.data_mod}</td>
+                    <td>${arq.tamanho}</td>
+                    <td style="text-align: right;">
+                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.8rem; background-color: var(--accent-purple, #8E44AD); border-color: var(--accent-purple, #8E44AD);" onclick="baixarArquivo('${arq.caminho}')">Baixar</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filtrarRelatoriosXml() {
+            const query = document.getElementById('search-xml').value.toLowerCase().trim();
+            if (!query) {
+                renderizarTabelaRelatoriosXml(listaRelatoriosXmlCache);
+                return;
+            }
+            const filtrados = listaRelatoriosXmlCache.filter(arq =>
+                arq.nome.toLowerCase().includes(query) ||
+                arq.empresa.toLowerCase().includes(query) ||
+                arq.data_pasta.includes(query) ||
+                (arq.cnpj && arq.cnpj.toLowerCase().includes(query))
+            );
+            renderizarTabelaRelatoriosXml(filtrados);
+        }
+
+        function setLogTab(tab) {
+            activeLogTab = tab;
+            document.getElementById('btn-log-ecac').style.backgroundColor = (tab === 'ecac') ? 'var(--primary)' : '';
+            document.getElementById('btn-log-ecac').style.color = (tab === 'ecac') ? '#ffffff' : 'var(--text-color)';
+            document.getElementById('btn-log-xml').style.backgroundColor = (tab === 'xml') ? 'var(--accent-purple, #8E44AD)' : '';
+            document.getElementById('btn-log-xml').style.color = (tab === 'xml') ? '#ffffff' : 'var(--text-color)';
+            
+            // Força recarga imediata
+            if (tab === 'ecac') {
+                obterStatusRobo();
+            } else {
+                obterStatusRoboXml();
+            }
         }
 
         /* --- CONFIGURATIONS LOGIC --- */

@@ -2194,10 +2194,10 @@ def main():
                     except Exception as xls_err:
                         log(f"Aviso ao atualizar painel Excel dinamicamente: {xls_err}", "WARNING")
                         
-                    # Atraso regulamentar de 1 minuto entre execuções de clientes (se não houve falha que reiniciou o navegador)
+                    # Atraso regulamentar de 5 segundos entre execuções de clientes (se não houve falha que reiniciou o navegador)
                     if not need_browser_restart:
-                        log("Aguardando 1 minuto de intervalo regulamentar antes de prosseguir para o próximo cliente...", "INFO")
-                        time.sleep(60)
+                        log("Aguardando 5 segundos de intervalo regulamentar antes de prosseguir para o próximo cliente...", "INFO")
+                        time.sleep(5)
                             
             if context:
                 try:
