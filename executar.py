@@ -1517,6 +1517,7 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
             new_page.close()
             raise Exception(f"Falha ao realizar download do PDF do Relatório: {e}")
 
+def realizar_login_manual(config):
     # Forçar a limpeza logo no início do login manual por segurança
     limpar_processos_automatizados_antigos()
 

@@ -615,12 +615,20 @@ def iniciar_automacao():
         cmd.append("--forcar-todos")
         
     try:
+        # Configurar startupinfo no Windows para evitar que o processo herde o estado oculto (SW_HIDE) da VBScript
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = 1  # SW_SHOWNORMAL (1) - força as janelas (como o Chrome visível) a aparecerem
+
         # Iniciar o subprocesso de forma assíncrona, redirecionando saídas para evitar deadlock
         processo_automacao = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            cwd=os.getcwd()
+            cwd=os.getcwd(),
+            startupinfo=startupinfo
         )
         return jsonify({"status": "success", "message": "Automação iniciada com sucesso no servidor."})
     except Exception as e:
