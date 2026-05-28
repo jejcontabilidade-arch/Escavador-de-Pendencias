@@ -1,9 +1,0 @@
-{
-    "cnpj": "30544725000101",
-    "nome": "LOUCOS POR PAO ARTESANAL LTDA",
-    "data_consulta": "2026-05-28",
-    "hora_consulta": "10:14:16",
-    "status": "Erro",
-    "detalhes": "Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"a[href*=\\\"manifestacao\\\"], a:has-text(\\\"Manifestação Destinatário\\\"), a:has-text(\\\"Manifestacao Destinatario\\\")\").first\n    - locator resolved to <a href=\"manifestacaoDestinatario.aspx?tipoConteudo=o9MkXc+hmKs=\">Manifestação Destinatário</a>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n      - waiting 100ms\n    57 × waiting for element to be visible, enabled and stable\n       - element is not visible\n     - retrying click action\n       - waiting 500ms\n",
-    "contador_falhas_hoje": 4
-}

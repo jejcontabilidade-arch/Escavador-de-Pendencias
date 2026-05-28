@@ -1,0 +1,41 @@
+# Lista de Tarefas: Refatoração do Robô de NF-e XML
+
+- [x] **Tarefa 1**: Criar a função `obter_status_resumo_nfe` no `agente_escavador.py` para ler o arquivo de estado do robô XML.
+- [x] **Tarefa 2**: Modificar o prompt do GPT-4o-mini e a heurística para incluir as intenções separadas de status.
+- [x] **Tarefa 3**: Atualizar o processamento do webhook para tratar as intenções de status individuais e consolidadas.
+- [x] **Tarefa 4**: Validar que a sintaxe do código está compilando corretamente.
+- [x] **Tarefa 5**: Resolver problemas de concorrência e processos órfãos (iniciar/parar processos de forma nativa e automática no Windows via Job Objects e busca de PIDs no SO).
+- [x] **Tarefa 6**: Implementar focagem de janela ativa (`focar_janela_certificado`) antes da simulação de teclas de login (`press_enter`) no e-CAC e NF-e para evitar perda de foco para o painel Edge.
+- [x] **Tarefa 7**: Desabilitar balão de recuperação de falhas do Chrome ("Restaurar páginas") utilizando as flags `--disable-session-crashed-bubble` e `--disable-features=BubbleSessionCrashedBubble`.
+- [x] **Tarefa 8**: Adicionar `wait_for_selector('input[id*="iptCNPJBase"]')` para evitar race condition no carregamento da tela de consulta de CNPJ pós-seleção de "Não tenho a Chave".
+- [x] **Tarefa 9**: Corrigir a lógica de foco em `focar_janela_certificado` para executar a simulação do toque no ALT apenas quando a janela ativa não for a alvo (Chrome/diálogo), contornando as restrições do `SetForegroundWindow` no Windows sem travar os menus do Chrome.
+- [x] **Tarefa 10**: Mudar a regex de correspondência da chave de acesso de 44 dígitos de `\b\d{44}\b` para `(?<!\d)\d{44}(?!\d)` para captura resiliente a sublinhados/underline no HTML.
+
+## Refatoração da Varredura Centralizada (Foco no Contador e Chaves)
+- [x] **Tarefa 11**: Detectar CNPJ e Nome do certificado digital através do arquivo `.pfx` no diretório de execução (ou fallback para J&J SERVICOS PROFISSIONAIS LTDA / `05443435000124`).
+- [x] **Tarefa 12**: Modificar `main()` para realizar uma busca única no menu de Manifestações de Destinatário sob o CNPJ do certificado (removendo o loop completo sobre `clientes.csv`).
+- [x] **Tarefa 13**: Atualizar a lógica de extração de chaves de acesso da manifestação e a iteração para baixar o XML de cada chave.
+- [x] **Tarefa 14**: Refatorar `gerar_excel_resumo` para que a planilha `nota_fiscal_xml.xlsx` liste cada chave de acesso baixada com os dados do contador (J&J).
+- [x] **Tarefa 15**: Atualizar o salvamento do progresso em tempo real (`temp/state_nota_fiscal_xml.json`) para rastrear o download de chaves de acesso ao invés de clientes do CSV.
+- [x] **Tarefa 16**: Validar a compilação do código, atualizar interface textual no painel web (index.html) e preparar para teste de execução.
+- [x] **Tarefa 17**: Reduzir os tempos de espera na resolução de Captcha (Revertido para os tempos originais estáveis a pedido do usuário).
+- [x] **Tarefa 18**: Implementar verificação de arquivo XML local no disco para pular downloads redundantes e evitar a necessidade de resolver Captchas desnecessários para notas já baixadas.
+
+## Conversão Automática de NF-e XML para JSON
+- [x] **Tarefa 19**: Implementar a função `converter_xml_nfe_para_json` para ler XMLs, limpar namespaces e gerar dicionários estruturados.
+- [x] **Tarefa 20**: Injetar a chamada de conversão de XML para JSON no loop de downloads no `main()`.
+- [x] **Tarefa 21**: Integrar a verificação de JSON ausente na rotina de bypass do loop de chaves, gerando o JSON sob demanda a partir do XML local se ele faltar.
+- [x] **Tarefa 22**: Validar compilação e testar a geração automática do JSON a partir do XML existente.
+
+## Estabilidade e Robustez de Login com Certificado SSL
+- [x] **Tarefa 23**: Adicionar filtro de blacklist em `focar_janela_certificado` e `dialogo_certificado_aberto` para ignorar janelas do usuário (como planilhas Excel abertas) que geravam falsos positivos.
+- [x] **Tarefa 24**: Implementar a função `executar_confirmacao_certificado_em_loop` com monitoramento por thread e tentativas periódicas (até 15s de amostragem, limitando a 5 tentativas de ENTER).
+- [x] **Tarefa 25**: Integrar a nova thread de login em loop nas rotinas do e-CAC (`executar.py`) e do robô NF-e XML (`consultar_nota_fiscal_xml.py`).
+- [x] **Tarefa 26**: Validar a compilação final e verificar funcionamento dos scripts de execução.
+
+
+
+
+
+
+

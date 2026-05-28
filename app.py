@@ -941,7 +941,7 @@ def iniciar_nota_fiscal_xml():
     dados = request.json or {}
     forcar_todos = dados.get("forcar_todos", False)
     
-    cmd = [sys.executable, "consultar_nota_fiscal_xml.py"]
+    cmd = [sys.executable, "consultar_nota_fiscal_xml.py", "--condominios"]
     if forcar_todos:
         cmd.append("--forcar-todos")
         
@@ -1119,7 +1119,7 @@ def webhook_whatsapp():
                 rodando_teste, _ = is_process_running_by_script("consultar_nota_fiscal_xml.py")
                 if rodando_teste or (processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None):
                     return False
-                cmd = [sys.executable, "consultar_nota_fiscal_xml.py"]
+                cmd = [sys.executable, "consultar_nota_fiscal_xml.py", "--condominios"]
                 if forcar_todos:
                     cmd.append("--forcar-todos")
                 if destinatario:

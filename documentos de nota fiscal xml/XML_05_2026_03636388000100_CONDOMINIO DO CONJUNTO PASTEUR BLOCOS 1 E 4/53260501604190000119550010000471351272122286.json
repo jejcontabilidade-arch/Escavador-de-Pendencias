@@ -1,0 +1,667 @@
+{
+    "@atributos": {
+        "versao": "4.00"
+    },
+    "NFe": {
+        "infNFe": {
+            "@atributos": {
+                "Id": "NFe53260501604190000119550010000471351272122286",
+                "versao": "4.00"
+            },
+            "ide": {
+                "cUF": 53,
+                "cNF": 27212228,
+                "natOp": "Venda a vista",
+                "mod": 55,
+                "serie": 1,
+                "nNF": 47135,
+                "dhEmi": "2026-05-22T08:51:00-03:00",
+                "dhSaiEnt": "2026-05-22T08:51:00-03:00",
+                "tpNF": 1,
+                "idDest": 1,
+                "cMunFG": 5300108,
+                "tpImp": 1,
+                "tpEmis": 1,
+                "cDV": 6,
+                "tpAmb": 1,
+                "finNFe": 1,
+                "indFinal": 1,
+                "indPres": 1,
+                "procEmi": 0,
+                "verProc": "f-2026"
+            },
+            "emit": {
+                "CNPJ": 1604190000119,
+                "xNome": "PIETRO DALLA MUTTA JUNIOR ME",
+                "xFant": "KI LIMPEZA",
+                "enderEmit": {
+                    "xLgr": "Quadra SHCS CL QD 413 BLOCO C LOJA",
+                    "nro": 30,
+                    "xBairro": "ASA SUL",
+                    "cMun": 5300108,
+                    "xMun": "Brasilia",
+                    "UF": "DF",
+                    "CEP": 70296530,
+                    "cPais": 1058,
+                    "xPais": "BRASIL",
+                    "fone": 6133454471
+                },
+                "IE": 736713800157,
+                "CRT": 1
+            },
+            "dest": {
+                "CNPJ": 3636388000100,
+                "xNome": "CONDOMINIO DO CONJUNTO PASTEUR BLOCOS 1 E 4",
+                "enderDest": {
+                    "xLgr": "Outros SEP EQS 712 912 CJ B",
+                    "nro": "S/N",
+                    "xBairro": "ASA SUL",
+                    "cMun": 5300108,
+                    "xMun": "Brasilia",
+                    "UF": "DF",
+                    "CEP": 70310500,
+                    "cPais": 1058,
+                    "xPais": "BRASIL",
+                    "fone": 6133455471
+                },
+                "indIEDest": 9,
+                "IE": 817049100195
+            },
+            "det": [
+                {
+                    "@atributos": {
+                        "nItem": "1"
+                    },
+                    "prod": {
+                        "cProd": 1047,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "SACO DE LIXO 100LT CINZA C/100UND",
+                        "NCM": 39232190,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 1.0,
+                        "vUnCom": 57.9,
+                        "vProd": 57.9,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 1.0,
+                        "vUnTrib": 57.9,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 20.34,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "PIS": {
+                            "PISOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "2"
+                    },
+                    "prod": {
+                        "cProd": 393,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "SACO DE LIXO 200LTS AZUL REF. C/ 100UND",
+                        "NCM": 39232190,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 1.0,
+                        "vUnCom": 85.0,
+                        "vProd": 85.0,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 1.0,
+                        "vUnTrib": 85.0,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 29.86,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "PIS": {
+                            "PISOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "3"
+                    },
+                    "prod": {
+                        "cProd": 135,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "PAPEL HIG. MIMMO FL. DUPLA C/16X30MTS",
+                        "NCM": 48181000,
+                        "CEST": 2004200,
+                        "CFOP": 5405,
+                        "uCom": "UN",
+                        "qCom": 1.0,
+                        "vUnCom": 26.9,
+                        "vProd": 26.9,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 1.0,
+                        "vUnTrib": 26.9,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 8.46,
+                        "ICMS": {
+                            "ICMSSN500": {
+                                "orig": 0,
+                                "CSOSN": 500,
+                                "vBCSTRet": 0.0,
+                                "pST": 18.0,
+                                "vICMSSubstituto": 0.0,
+                                "vICMSSTRet": 0.0
+                            }
+                        },
+                        "PIS": {
+                            "PISOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "4"
+                    },
+                    "prod": {
+                        "cProd": 24,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "DESINFETANTE ACERO SAN CLEAN 5LT",
+                        "NCM": 38089359,
+                        "CEST": 2806300,
+                        "CFOP": 5102,
+                        "uCom": "GL",
+                        "qCom": 2.0,
+                        "vUnCom": 39.9,
+                        "vProd": 79.8,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "GL",
+                        "qTrib": 2.0,
+                        "vUnTrib": 39.9,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 25.1,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "PIS": {
+                            "PISOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "5"
+                    },
+                    "prod": {
+                        "cProd": 44,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "PAPEL TOALHA INT. UNIQUE BASIC 20X23CM C/1000FLS",
+                        "NCM": 48182000,
+                        "CEST": 2802401,
+                        "CFOP": 5405,
+                        "uCom": "UN",
+                        "qCom": 1.0,
+                        "vUnCom": 22.9,
+                        "vProd": 22.9,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 1.0,
+                        "vUnTrib": 22.9,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 7.51,
+                        "ICMS": {
+                            "ICMSSN500": {
+                                "orig": 0,
+                                "CSOSN": 500,
+                                "vBCSTRet": 0.0,
+                                "pST": 18.0,
+                                "vICMSSubstituto": 0.0,
+                                "vICMSSTRet": 0.0
+                            }
+                        },
+                        "PIS": {
+                            "PISOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "6"
+                    },
+                    "prod": {
+                        "cProd": 82,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "REFIL DE BORRACHA P/ RODO SUGGAR 60CM",
+                        "NCM": 64062000,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 1.0,
+                        "vUnCom": 9.5,
+                        "vProd": 9.5,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 1.0,
+                        "vUnTrib": 9.5,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 2.99,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "PIS": {
+                            "PISOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "7"
+                    },
+                    "prod": {
+                        "cProd": 1055,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "COPO DESC. 180ML FONPLAS C/ 100 UND",
+                        "NCM": 39241000,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 3.0,
+                        "vUnCom": 5.9,
+                        "vProd": 17.7,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 3.0,
+                        "vUnTrib": 5.9,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 5.99,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "PIS": {
+                            "PISOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "8"
+                    },
+                    "prod": {
+                        "cProd": 209,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "PEDRA SANITARIA POLITRIZ 25g",
+                        "NCM": 38085910,
+                        "CFOP": 5405,
+                        "uCom": "UN",
+                        "qCom": 10.0,
+                        "vUnCom": 2.9,
+                        "vProd": 29.0,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 10.0,
+                        "vUnTrib": 2.9,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 9.12,
+                        "ICMS": {
+                            "ICMSSN500": {
+                                "orig": 0,
+                                "CSOSN": 500,
+                                "vBCSTRet": 0.0,
+                                "pST": 18.0,
+                                "vICMSSubstituto": 0.0,
+                                "vICMSSTRet": 0.0
+                            }
+                        },
+                        "PIS": {
+                            "PISOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "9"
+                    },
+                    "prod": {
+                        "cProd": 35,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "LIMPA PEDRAS PEDREX GL 5LT",
+                        "NCM": 34029039,
+                        "CFOP": 5405,
+                        "uCom": "GL",
+                        "qCom": 1.0,
+                        "vUnCom": 52.9,
+                        "vProd": 52.9,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "GL",
+                        "qTrib": 1.0,
+                        "vUnTrib": 52.9,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 17.62,
+                        "ICMS": {
+                            "ICMSSN500": {
+                                "orig": 0,
+                                "CSOSN": 500,
+                                "vBCSTRet": 0.0,
+                                "pST": 18.0,
+                                "vICMSSubstituto": 0.0,
+                                "vICMSSTRet": 0.0
+                            }
+                        },
+                        "PIS": {
+                            "PISOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "10"
+                    },
+                    "prod": {
+                        "cProd": 13,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "SACO DE LIXO 20LT PRETO C/100UND",
+                        "NCM": 39232190,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 1.0,
+                        "vUnCom": 19.9,
+                        "vProd": 19.9,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 1.0,
+                        "vUnTrib": 19.9,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 6.99,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "PIS": {
+                            "PISOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSOutr": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                }
+            ],
+            "total": {
+                "ICMSTot": {
+                    "vBC": 0.0,
+                    "vICMS": 0.0,
+                    "vICMSDeson": 0.0,
+                    "vFCP": 0.0,
+                    "vBCST": 0.0,
+                    "vST": 0.0,
+                    "vFCPST": 0.0,
+                    "vFCPSTRet": 0.0,
+                    "vProd": 401.5,
+                    "vFrete": 0.0,
+                    "vSeg": 0.0,
+                    "vDesc": 0.0,
+                    "vII": 0.0,
+                    "vIPI": 0.0,
+                    "vIPIDevol": 0.0,
+                    "vPIS": 0.0,
+                    "vCOFINS": 0.0,
+                    "vOutro": 0.0,
+                    "vNF": 401.5,
+                    "vTotTrib": 133.98
+                }
+            },
+            "transp": {
+                "modFrete": 9
+            },
+            "cobr": {
+                "fat": {
+                    "nFat": 47135,
+                    "vOrig": 401.5,
+                    "vDesc": 0.0,
+                    "vLiq": 401.5
+                },
+                "dup": [
+                    {
+                        "nDup": 1,
+                        "dVenc": "2026-06-19",
+                        "vDup": 401.5
+                    }
+                ]
+            },
+            "pag": [
+                {
+                    "detPag": {
+                        "indPag": 1,
+                        "tPag": 5,
+                        "vPag": 401.5
+                    }
+                }
+            ],
+            "infAdic": {
+                "infCpl": "I-DOC.EMITIDO P/ME OU EPP OPTANTE P/SIMPLES NACIONAL |II-NAO GERA DIREITO A CREDITO FISCAL DE IPI |MD5: 8047183112615EB7B6F33D558BAAF8AB|Trib Aprox. R$ 61,70 Fed - R$ 72,26 Est - R$ 0,00 Mun / Fonte:IBPT/empresome 3CA397"
+            }
+        },
+        "Signature": {
+            "SignedInfo": {
+                "CanonicalizationMethod": {
+                    "@atributos": {
+                        "Algorithm": "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+                    }
+                },
+                "SignatureMethod": {
+                    "@atributos": {
+                        "Algorithm": "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+                    }
+                },
+                "Reference": {
+                    "@atributos": {
+                        "URI": "#NFe53260501604190000119550010000471351272122286"
+                    },
+                    "Transforms": {
+                        "Transform": [
+                            {
+                                "@atributos": {
+                                    "Algorithm": "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
+                                }
+                            },
+                            {
+                                "@atributos": {
+                                    "Algorithm": "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+                                }
+                            }
+                        ]
+                    },
+                    "DigestMethod": {
+                        "@atributos": {
+                            "Algorithm": "http://www.w3.org/2000/09/xmldsig#sha1"
+                        }
+                    },
+                    "DigestValue": "VfjlJUbzx/1JSTCs+zNd0il+eJE="
+                }
+            },
+            "SignatureValue": "D+cJJHcNMnBi22t2MnHglPg1Umrqsh5mH6bFtJRk8lvI718zLh+57B+EKekiHZtmYY7iD/R2x4PQWDijPgRrLZyIhY/gp+LBBXmpjTGuLzheeNSY//k57Wwvc3CGJIfDoUlEB/dQDaPLmmDUkGjXN5czD7CiKCggflyU3B8zLNn3Y3GjRl7fnTRn0H0lLWQ6FvusGglr/tgLb0MbHkSte0VbL6EOy4EevxXSwE0NjihdWMUsYe4yg0VHMUp+gssmOTusl4Xkjdo1y0wyc0KqPnZsJ/o7LoAZ2RK51/Gl+iOetBPVUjhJaAUcWAxISL4mgDFnzGXuv4p/d0fdoOubMg==",
+            "KeyInfo": {
+                "X509Data": {
+                    "X509Certificate": "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"
+                }
+            }
+        }
+    },
+    "protNFe": {
+        "@atributos": {
+            "versao": "4.00"
+        },
+        "infProt": {
+            "tpAmb": 1,
+            "verAplic": "SVRS2605211109DR",
+            "chNFe": 53260501604190000119550010000471351272122286,
+            "dhRecbto": "2026-05-22T09:01:07-03:00",
+            "nProt": 253260036419031,
+            "digVal": "VfjlJUbzx/1JSTCs+zNd0il+eJE=",
+            "cStat": 100,
+            "xMotivo": "Autorizado o uso da NF-e"
+        }
+    }
+}

@@ -6,5 +6,8 @@
     "portal_url": "https://cav.receita.fazenda.gov.br/eCAC/Default.aspx#",
     "cert_first_char": "J",
     "download_timeout_ms": 60000,
-    "whatsapp_enabled": true
+    "whatsapp_enabled": true,
+    "caminho_certificados_servidor": "\\\\Srvjej\\contabilidade 2023\\8 - CERTIFICADOS\\",
+    "caminho_certificados_local": "C:\\Certificados_Escavador\\",
+    "senha_padrao_pfx": "123456"
 }

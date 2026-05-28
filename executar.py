@@ -67,6 +67,40 @@ def limpar_processos_automatizados_antigos():
                 log(f"Aviso ao remover {lock_path} (pode já ter sido destravado): {e}", "WARNING")
 
 # Enviar o caractere inicial (se fornecido) e depois a tecla ENTER para o Windows
+def dialogo_certificado_aberto():
+    EnumWindows = ctypes.windll.user32.EnumWindows
+    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+    GetWindowText = ctypes.windll.user32.GetWindowTextW
+    GetWindowTextLength = ctypes.windll.user32.GetWindowTextLengthW
+    IsWindowVisible = ctypes.windll.user32.IsWindowVisible
+    
+    aberto = [False]
+    
+    def foreach_window(hwnd, lParam):
+        if IsWindowVisible(hwnd):
+            length = GetWindowTextLength(hwnd)
+            buff = ctypes.create_unicode_buffer(length + 1)
+            GetWindowText(hwnd, buff, length + 1)
+            title = buff.value
+            title_lower = title.lower()
+            
+            # Blacklist para evitar planilhas, códigos e editores abertos do usuário
+            blacklist = ["- excel", "- word", "- notepad", "visual studio", "code", ".py", ".xlsx", ".xls", "cmd.exe", "powershell", "escavador"]
+            if any(b in title_lower for b in blacklist):
+                return True
+                
+            termos_cert = ["selecione um certificado", "selecione o certificado", "confirmar certificado", 
+                           "select a certificate", "confirm certificate", "segurança do windows", 
+                           "windows security", "credenciais de segurança", "security credentials", 
+                           "pin do certificado", "insira o pin", "controle de acesso"]
+            if any(t in title_lower for t in termos_cert) or (any(x in title_lower for x in ["certificado", "segurança"]) and not any(b in title_lower for b in blacklist)):
+                aberto[0] = True
+                return False
+        return True
+
+    EnumWindows(EnumWindowsProc(foreach_window), 0)
+    return aberto[0]
+
 def focar_janela_certificado(keywords_browser):
     EnumWindows = ctypes.windll.user32.EnumWindows
     EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
@@ -86,8 +120,18 @@ def focar_janela_certificado(keywords_browser):
             title = buff.value
             title_lower = title.lower()
             
+            # Blacklist para evitar planilhas, códigos e editores abertos do usuário
+            blacklist = ["- excel", "- word", "- notepad", "visual studio", "code", ".py", ".xlsx", ".xls", "cmd.exe", "powershell", "escavador"]
+            if any(b in title_lower for b in blacklist):
+                return True
+                
+            termos_cert = ["selecione um certificado", "selecione o certificado", "confirmar certificado", 
+                           "select a certificate", "confirm certificate", "segurança do windows", 
+                           "windows security", "credenciais de segurança", "security credentials", 
+                           "pin do certificado", "insira o pin", "controle de acesso"]
+            
             # 1. Diálogos de certificado ou segurança
-            if any(x in title_lower for x in ["certificado", "confirmar", "selecione", "segurança", "credential"]):
+            if any(t in title_lower for t in termos_cert) or (any(x in title_lower for x in ["certificado", "segurança"]) and not any(b in title_lower for b in blacklist)):
                 found_hwnds.append((hwnd, title, 2))
             # 2. Janela do navegador da nossa automação
             elif any(x in title_lower for x in keywords_browser):
@@ -103,14 +147,18 @@ def focar_janela_certificado(keywords_browser):
     found_hwnds.sort(key=lambda x: x[2], reverse=True)
     target_hwnd, title, priority = found_hwnds[0]
     
-    log(f"[AUTO-LOGIN] Focando na janela encontrada (Prioridade {priority}): '{title}'", "SYSTEM")
+    log(f"[AUTO-LOGIN] Janela alvo encontrada (Prioridade {priority}): '{title}'", "SYSTEM")
     try:
-        # Simula toque no ALT para destravar SetForegroundWindow
-        ctypes.windll.user32.keybd_event(0x12, 0, 0, 0)
-        ctypes.windll.user32.keybd_event(0x12, 0, 2, 0)
-        ShowWindow(target_hwnd, 9) # SW_RESTORE
-        SetForegroundWindow(target_hwnd)
-        time.sleep(0.5)
+        current_active = ctypes.windll.user32.GetForegroundWindow()
+        if current_active != target_hwnd:
+            # Simula toque no ALT para destravar SetForegroundWindow
+            ctypes.windll.user32.keybd_event(0x12, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(0x12, 0, 2, 0)
+            ShowWindow(target_hwnd, 9) # SW_RESTORE
+            SetForegroundWindow(target_hwnd)
+            time.sleep(0.5)
+        else:
+            log("[AUTO-LOGIN] Janela alvo já está ativa. Ignorando refocus.", "SYSTEM")
         return True
     except Exception as e:
         log(f"[AUTO-LOGIN] Erro ao focar janela: {e}", "WARNING")
@@ -133,6 +181,22 @@ def press_enter(first_char=None):
     ctypes.windll.user32.keybd_event(VK_RETURN, 0, 0, 0) # Key Down
     ctypes.windll.user32.keybd_event(VK_RETURN, 0, 2, 0) # Key Up
     log("ENTER enviado.", "SYSTEM")
+
+def executar_confirmacao_certificado_em_loop(config, log_prefix):
+    import time
+    first_char = config.get("cert_first_char", "J")
+    log(f"{log_prefix} Iniciando rotina de confirmacao de certificado SSL (Letra: '{first_char}')...", "SYSTEM")
+    
+    # Aguarda 3.5 segundos para a janela do Chrome iniciar o redirecionamento e abrir o diálogo
+    time.sleep(3.5)
+    
+    # Realiza 3 tentativas espaçadas de focar e dar ENTER
+    for attempt in range(1, 4):
+        log(f"{log_prefix} Tentativa {attempt}/3 de confirmacao...", "SYSTEM")
+        press_enter(first_char if attempt == 1 else None)
+        time.sleep(1.5)
+        
+    log(f"{log_prefix} Rotina de confirmacao concluida.", "SUCCESS")
 
 # Função auxiliar para fechar modais jQuery UI e Caixa Postal que cobrem a tela
 def fechar_modais_e_overlays(page):
@@ -373,20 +437,19 @@ def verificar_e_reestabelecer_sessao(page, config):
             # Aguarda o botão do certificado
             page.wait_for_selector('button#login-certificate, #login-certificate', timeout=15000)
             
-            # Dispara a thread para dar ENTER
+            # Dispara a thread para dar ENTER com monitoramento em loop
             import threading
-            def auto_confirm_dialog():
-                time.sleep(3.5)
-                log("[AUTO-LOGIN-RETRY] Janela de seleção do Windows deve estar aberta. Simulando ENTER...", "SYSTEM")
-                first_char = config.get("cert_first_char", "J")
-                press_enter(first_char)
-                time.sleep(1.2)
-                press_enter()
-                
-            threading.Thread(target=auto_confirm_dialog, daemon=True).start()
+            threading.Thread(
+                target=executar_confirmacao_certificado_em_loop,
+                args=(config, "[AUTO-LOGIN-RETRY]"),
+                daemon=True
+            ).start()
             
             log("Clicando no botão 'Seu certificado digital'...", "ACTION")
-            page.click('button#login-certificate')
+            try:
+                page.click('button#login-certificate', timeout=5000)
+            except Exception as e_click:
+                log(f"Aviso no clique do certificado (TLS travou a thread temporariamente, esperado): {e_click}", "INFO")
             
             # Aguarda o painel
             page.wait_for_selector("text=Alterar perfil de acesso", timeout=45000)
@@ -1694,21 +1757,19 @@ def realizar_login_manual(config):
             page.wait_for_selector('button#login-certificate, #login-certificate', timeout=15000)
             log("Botão 'Seu certificado digital' (#login-certificate) detectado!", "SUCCESS")
             
-            # 3. Disparar thread em background para simular o ENTER no diálogo do Windows
+            # 3. Disparar thread em background para simular o ENTER no diálogo do Windows com monitoramento em loop
             import threading
-            def auto_confirm_dialog():
-                time.sleep(3.5)
-                log("[AUTO-LOGIN] Janela de seleção do Windows deve estar aberta. Simulando ENTER...", "SYSTEM")
-                first_char = config.get("cert_first_char", "J")
-                press_enter(first_char)
-                # Envia um segundo ENTER por segurança após 1.2 segundos caso o foco tenha demorado
-                time.sleep(1.2)
-                press_enter()
-                
-            threading.Thread(target=auto_confirm_dialog, daemon=True).start()
+            threading.Thread(
+                target=executar_confirmacao_certificado_em_loop,
+                args=(config, "[AUTO-LOGIN]"),
+                daemon=True
+            ).start()
             
             log("Clicando no botão 'Seu certificado digital' e aguardando confirmação do Windows...", "ACTION")
-            page.click('button#login-certificate')
+            try:
+                page.click('button#login-certificate', timeout=5000)
+            except Exception as e_click:
+                log(f"Aviso no clique do certificado (TLS travou a thread temporariamente, esperado): {e_click}", "INFO")
             
         except Exception as auto_err:
             log(f"Aviso no fluxo automático: {auto_err}", "WARNING")

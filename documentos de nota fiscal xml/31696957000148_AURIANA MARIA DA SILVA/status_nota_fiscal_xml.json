@@ -1,9 +1,0 @@
-{
-    "cnpj": "31696957000148",
-    "nome": "AURIANA MARIA DA SILVA",
-    "data_consulta": "2026-05-28",
-    "hora_consulta": "09:05:26",
-    "status": "Erro",
-    "detalhes": "Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"a[href*=\\\"manifestacao\\\"], a:has-text(\\\"Manifestação Destinatário\\\"), a:has-text(\\\"Manifestacao Destinatario\\\")\").first\n    - locator resolved to <a href=\"manifestacaoDestinatario.aspx?tipoConteudo=o9MkXc+hmKs=\">Manifestação Destinatário</a>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n      - waiting 100ms\n    15 × waiting for element to be visible, enabled and stable\n       - element is not visible\n     - retrying click action\n       - waiting 500ms\n  - element was detached from the DOM, retrying\n    - locator resolved to <a href=\"manifestacaoDestinatario.aspx?tipoConteudo=o9MkXc+hmKs=\">Manifestação Destinatário</a>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n      - waiting 100ms\n    42 × waiting for element to be visible, enabled and stable\n       - element is not visible\n     - retrying click action\n       - waiting 500ms\n",
-    "contador_falhas_hoje": 1
-}

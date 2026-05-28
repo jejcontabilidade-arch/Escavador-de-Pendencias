@@ -2548,11 +2548,12 @@
                 document.getElementById('progress-bar-val-xml').style.width = `${pct}%`;
 
                 if (status.rodando) {
-                    document.getElementById('lbl-empresa-atual-xml').innerText = `Processando: ${status.empresa_atual}`;
-                    document.getElementById('lbl-detalhes-progresso-xml').innerText = `Empresa ${proc} de ${total} (${pct}% concluído) | Sucessos: ${status.sucessos} - Falhas: ${status.falhas}`;
+                    const prefixo = status.empresa_atual.includes("...") ? "" : "Processando: ";
+                    document.getElementById('lbl-empresa-atual-xml').innerText = `${prefixo}${status.empresa_atual}`;
+                    document.getElementById('lbl-detalhes-progresso-xml').innerText = `Progresso: ${proc} de ${total} chaves (${pct}% concluído) | Sucessos: ${status.sucessos} - Falhas: ${status.falhas}`;
                 } else {
                     document.getElementById('lbl-empresa-atual-xml').innerText = 'Aguardando início...';
-                    document.getElementById('lbl-detalhes-progresso-xml').innerText = `Último status: ${proc} de ${total} processados.`;
+                    document.getElementById('lbl-detalhes-progresso-xml').innerText = `Último status: ${proc} de ${total} chaves processadas | Sucessos: ${status.sucessos} - Falhas: ${status.falhas}`;
                 }
 
                 // Alimentar Terminal de Logs se estiver na aba Nota Fiscal XML

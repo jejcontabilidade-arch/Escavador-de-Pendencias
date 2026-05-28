@@ -1,0 +1,302 @@
+{
+    "@atributos": {
+        "versao": "4.00"
+    },
+    "NFe": {
+        "infNFe": {
+            "@atributos": {
+                "Id": "NFe53260538029534000113550010003683751196642687",
+                "versao": "4.00"
+            },
+            "ide": {
+                "cUF": 53,
+                "cNF": 19664268,
+                "natOp": "11-VENDA DE MERCADORIA (EXP)",
+                "mod": 55,
+                "serie": 1,
+                "nNF": 368375,
+                "dhEmi": "2026-05-25T11:39:44-03:00",
+                "dhSaiEnt": "2026-05-25T11:39:44-03:00",
+                "tpNF": 1,
+                "idDest": 1,
+                "cMunFG": 5300108,
+                "tpImp": 1,
+                "tpEmis": 1,
+                "cDV": 7,
+                "tpAmb": 1,
+                "finNFe": 1,
+                "indFinal": 1,
+                "indPres": 1,
+                "procEmi": 0,
+                "verProc": "SAC Gerencial Rev. 3"
+            },
+            "emit": {
+                "CNPJ": 38029534000113,
+                "xNome": "OMNI COMERCIO E SERVICOS LTDA",
+                "xFant": "OMNI",
+                "enderEmit": {
+                    "xLgr": "SIG QUADRA 6",
+                    "nro": "Nr.2040",
+                    "xBairro": "SETOR GRAFICO",
+                    "cMun": 5300108,
+                    "xMun": "BRASILIA",
+                    "UF": "DF",
+                    "CEP": 70610460,
+                    "cPais": 1058,
+                    "xPais": "BRASIL",
+                    "fone": 6134413100
+                },
+                "IE": 731530400124,
+                "CRT": 3
+            },
+            "dest": {
+                "CNPJ": 5443435000124,
+                "xNome": "JeJ SERVICOS PROFISSIONAIS LTDA",
+                "enderDest": {
+                    "xLgr": "SHCS CR 512 BL C LJ 38",
+                    "nro": ".",
+                    "xBairro": "ASA SUL",
+                    "cMun": 5300108,
+                    "xMun": "BRASILIA",
+                    "UF": "DF",
+                    "CEP": 70361535,
+                    "cPais": 1058,
+                    "xPais": "BRASIL",
+                    "fone": 6132454290
+                },
+                "indIEDest": 1,
+                "IE": 752962400111,
+                "email": "josi@jejcontabilidade.net"
+            },
+            "det": [
+                {
+                    "@atributos": {
+                        "nItem": "1"
+                    },
+                    "prod": {
+                        "cProd": 177822,
+                        "cEAN": 17891173023008,
+                        "xProd": "CHAMEX A-4 75 GRS 210X297MM CX 10 UN CMX075CA4 CHAMEX",
+                        "NCM": 48025610,
+                        "CEST": 1903100,
+                        "cBenef": "DF816015",
+                        "CFOP": 5102,
+                        "uCom": "CX",
+                        "qCom": 3.0,
+                        "vUnCom": 222.9,
+                        "vProd": 668.7,
+                        "cEANTrib": 7891173023001,
+                        "uTrib": "CX",
+                        "qTrib": 3.0,
+                        "vUnTrib": 222.9,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 216.26,
+                        "ICMS": {
+                            "ICMS20": {
+                                "orig": 0,
+                                "CST": 20,
+                                "modBC": 3,
+                                "pRedBC": 83.33,
+                                "vBC": 557.23,
+                                "pICMS": 12.0,
+                                "vICMS": 66.87,
+                                "vICMSDeson": 15.2,
+                                "motDesICMS": 9
+                            }
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 668.7,
+                                "pPIS": 1.65,
+                                "vPIS": 11.03
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 668.7,
+                                "pCOFINS": 7.6,
+                                "vCOFINS": 50.82
+                            }
+                        },
+                        "IBSCBS": {
+                            "CST": 0,
+                            "cClassTrib": 1,
+                            "gIBSCBS": {
+                                "vBC": 428.51,
+                                "gIBSUF": {
+                                    "pIBSUF": 0.1,
+                                    "vIBSUF": 0.43
+                                },
+                                "gIBSMun": {
+                                    "pIBSMun": 0.0,
+                                    "vIBSMun": 0.0
+                                },
+                                "vIBS": 0.43,
+                                "gCBS": {
+                                    "pCBS": 0.9,
+                                    "vCBS": 3.86
+                                }
+                            }
+                        }
+                    },
+                    "vItem": 653.5
+                }
+            ],
+            "total": {
+                "ICMSTot": {
+                    "vBC": 557.23,
+                    "vICMS": 66.87,
+                    "vICMSDeson": 15.2,
+                    "vFCP": 0.0,
+                    "vBCST": 0.0,
+                    "vST": 0.0,
+                    "vFCPST": 0.0,
+                    "vFCPSTRet": 0.0,
+                    "vProd": 668.7,
+                    "vFrete": 0.0,
+                    "vSeg": 0.0,
+                    "vDesc": 0.0,
+                    "vII": 0.0,
+                    "vIPI": 0.0,
+                    "vIPIDevol": 0.0,
+                    "vPIS": 11.03,
+                    "vCOFINS": 50.82,
+                    "vOutro": 0.0,
+                    "vNF": 668.7,
+                    "vTotTrib": 216.26
+                },
+                "IBSCBSTot": {
+                    "vBCIBSCBS": 428.51,
+                    "gIBS": {
+                        "gIBSUF": {
+                            "vDif": 0.0,
+                            "vDevTrib": 0.0,
+                            "vIBSUF": 0.43
+                        },
+                        "gIBSMun": {
+                            "vDif": 0.0,
+                            "vDevTrib": 0.0,
+                            "vIBSMun": 0.0
+                        },
+                        "vIBS": 0.43,
+                        "vCredPres": 0.0,
+                        "vCredPresCondSus": 0.0
+                    },
+                    "gCBS": {
+                        "vDif": 0.0,
+                        "vDevTrib": 0.0,
+                        "vCBS": 3.86,
+                        "vCredPres": 0.0,
+                        "vCredPresCondSus": 0.0
+                    }
+                },
+                "vNFTot": 668.7
+            },
+            "transp": {
+                "modFrete": 9,
+                "vol": [
+                    {
+                        "pesoL": 70.167
+                    }
+                ]
+            },
+            "cobr": {
+                "fat": {
+                    "nFat": "PRE0194088/1",
+                    "vOrig": 668.7,
+                    "vDesc": 0.0,
+                    "vLiq": 668.7
+                },
+                "dup": [
+                    {
+                        "nDup": 1,
+                        "dVenc": "2026-06-24",
+                        "vDup": 668.7
+                    }
+                ]
+            },
+            "pag": [
+                {
+                    "detPag": {
+                        "indPag": 1,
+                        "tPag": 15,
+                        "vPag": 668.7
+                    }
+                }
+            ],
+            "infAdic": {
+                "infCpl": "DAV.00194088 Vend.DIRETO PAULA;Valor Aprox. Tributos R$ 216,26 (32.34%) Fonte:IBPT;20-Base de Calculo Reduzida conf. Art. 7 , Anexo 1, Item 15 do Decreto 18.955/97;BOLETO 30 DIAS A/C JOSI;Emitido por: DENIS (000003-5)"
+            },
+            "infRespTec": {
+                "CNPJ": 6289240000134,
+                "xContato": "Marcos Martins",
+                "email": "marcos.martins@lumisoftware.com.br",
+                "fone": 6133611001
+            }
+        },
+        "Signature": {
+            "SignedInfo": {
+                "CanonicalizationMethod": {
+                    "@atributos": {
+                        "Algorithm": "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+                    }
+                },
+                "SignatureMethod": {
+                    "@atributos": {
+                        "Algorithm": "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+                    }
+                },
+                "Reference": {
+                    "@atributos": {
+                        "URI": "#NFe53260538029534000113550010003683751196642687"
+                    },
+                    "Transforms": {
+                        "Transform": [
+                            {
+                                "@atributos": {
+                                    "Algorithm": "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
+                                }
+                            },
+                            {
+                                "@atributos": {
+                                    "Algorithm": "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+                                }
+                            }
+                        ]
+                    },
+                    "DigestMethod": {
+                        "@atributos": {
+                            "Algorithm": "http://www.w3.org/2000/09/xmldsig#sha1"
+                        }
+                    },
+                    "DigestValue": "3I7H6g/2Mg49nE6bAydzZ/jSc2s="
+                }
+            },
+            "SignatureValue": "eTO3Qa9cvGoOAtE+2JjL6psgW49lQfrCU6MuQtrt/4JtClguJ3Hx40YMYTPRp5bMmo89F2guzxsDMG/N3G+SFcgNlUMi8njbZzvlDVEGHFhIRRfAXyS7lb1QoZnW1xtwNx6PPn2Fwn2OYjl2k86HyPrgW+CKG+CBYznQv1Y41/ChQWEElsCTV7+tGfxaAp+TkcGfbDyM9gxA/DAE4ya8yY0Dl73kK0qMhsJyKZeBuhfUjcYCBUBCYEnpFiavVagS4siqV0lRevAI5KhE4EQo/1WpN2SF05r2aTEkjuY+nEMJIp4WtJGtaI1Jnpcp734kyk5rJxJvjVmvWRXEeAeuyA==",
+            "KeyInfo": {
+                "X509Data": {
+                    "X509Certificate": "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"
+                }
+            }
+        }
+    },
+    "protNFe": {
+        "@atributos": {
+            "versao": "4.00"
+        },
+        "infProt": {
+            "tpAmb": 1,
+            "verAplic": "SVRS2605211109DR",
+            "chNFe": 53260538029534000113550010003683751196642687,
+            "dhRecbto": "2026-05-25T11:39:45-03:00",
+            "nProt": 253260037016615,
+            "digVal": "3I7H6g/2Mg49nE6bAydzZ/jSc2s=",
+            "cStat": 100,
+            "xMotivo": "Autorizado o uso da NF-e"
+        }
+    }
+}

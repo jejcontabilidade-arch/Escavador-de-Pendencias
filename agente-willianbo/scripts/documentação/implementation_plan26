@@ -1,0 +1,85 @@
+# Plano de Implementação: Melhoria do Modelo de Excel para Notas Fiscais XML
+
+Este plano propõe uma reestruturação completa da planilha de controle e resultado de Notas Fiscais XML (`nota_fiscal_xml.xlsx`), transformando-a em um relatório fiscal de entrada de mercadorias. O novo modelo extrairá dados reais e detalhados diretamente dos arquivos JSON/XML de notas fiscais armazenados localmente e consolidará os status dos clientes de forma limpa, estilizada e profissional.
+
+---
+
+## Revisão do Usuário Requerida
+
+> [!IMPORTANT]
+> **Nova Estrutura e Colunas Fiscais da Planilha Excel:**
+> A planilha passará a conter **15 colunas** com dados tributários e de controle, formatados como moeda e centralizados adequadamente:
+>
+> 1. **Número NF** (Centralizado)
+> 2. **Série** (Centralizado)
+> 3. **Data Emissão** (Centralizado, no formato `YYYY-MM-DD HH:MM:SS`)
+> 4. **CNPJ Emitente** (Centralizado e formatado)
+> 5. **Nome Emitente** (Alinhado à esquerda)
+> 6. **CNPJ Destinatário** (Centralizado e formatado)
+> 7. **Nome Destinatário** (Alinhado à esquerda)
+> 8. **Valor Produtos** (Alinhado à direita, formatado como `R$ #,##0.00`)
+> 9. **Valor Nota (R$)** (Alinhado à direita, formatado como `R$ #,##0.00`)
+> 10. **PIS (R$)** (Alinhado à direita, formatado como `R$ #,##0.00`)
+> 11. **COFINS (R$)** (Alinhado à direita, formatado como `R$ #,##0.00`)
+> 12. **ICMS (R$)** (Alinhado à direita, formatado como `R$ #,##0.00`)
+> 13. **Chave de Acesso** (Centralizado)
+> 14. **Status de Download** (Centralizado, com preenchimentos coloridos conforme o status)
+> 15. **Data/Hora Consulta** (Centralizado)
+
+> [!NOTE]
+> **Consistência Através de Compilação do Disco:**
+> - Em vez de ler a planilha Excel legada para buscar o histórico de execuções anteriores, o robô lerá a base de dados real gravada localmente na pasta `documentos de nota fiscal xml/`.
+> - Notas fiscais baixadas com sucesso terão seus dados fiscais lidos dinamicamente de seus respectivos arquivos `.json`.
+> - Clientes ativos em `clientes.csv` sem notas baixadas aparecerão na planilha com chave `"N/A"` e o status correspondente (ex: `"Não Possui Manifestação"`, `"Sem Registros"`, `"Erro: ..."` ou `"Pendente"`), garantindo o controle total.
+> - A rotina de reconstrução manual (`rebuild_utils.py`) utilizará a mesma lógica unificada de compilação, assegurando planilhas idênticas.
+
+---
+
+## Modificações Propostas
+
+### [consultar_nota_fiscal_xml.py](file:///c:/Users/jejco/Desktop/Escavador%20de%20Pendencias/consultar_nota_fiscal_xml.py)
+
+#### 1. Inclusão da Função `extrair_dados_fiscais_nfe(caminho_json)`
+- Abre o arquivo `.json` de dados da NF-e convertida, navegando com resiliência pelas estruturas para capturar Número, Série, Data de Emissão, Emitente (CNPJ/xNome), Destinatário (CNPJ/xNome) e Valores Totais (Produtos, Nota, PIS, COFINS, ICMS).
+- Trata fusos horários na Data de Emissão e formata CNPJs de emitente e destinatário.
+- Executa conversão segura dos valores fiscais para `float` com tratamento de nulos/vazios.
+
+#### 2. Inclusão da Função `compilar_resultados_fiscais(erros_hoje=None, cnpj_cert_ativo=None)`
+- Lê todos os clientes ativos de `clientes.csv`.
+- Percorre a pasta `documentos de nota fiscal xml/` de cada cliente:
+  - Para cada arquivo `.json` de nota fiscal encontrado, extrai seus dados fiscais e adiciona na lista.
+  - Para o cliente ativo dono do certificado (`cnpj_cert_ativo`), adiciona também as chaves que deram erro na execução de hoje (presentes no dicionário `erros_hoje`) para fins de auditoria imediata.
+  - Se um cliente não possuir notas baixadas, adiciona uma linha genérica com chave `"N/A"`, valores fiscais vazios e o status geral de consulta do cliente.
+
+#### 3. Reformulação da Função `gerar_excel_resumo(resultados)`
+- Atualiza a assinatura e cabeçalho para o novo layout de 15 colunas.
+- Remove a lógica antiga de leitura do Excel legado.
+- Aplica estilos visuais premium (Tema Roxo, fonte Segoe UI, alinhamentos, bordas cinzas claras).
+- Aplica formatação de número de moeda brasileira (`R$ #,##0.00`) nas colunas 8, 9, 10, 11 e 12.
+- Aplica cores específicas de status na coluna 14 ("Status de Download"):
+  - **Verde Claro** (`#D4EFDF`): `"Baixado"`
+  - **Amarelo Claro** (`#FCF3CF`): `"Não Possui Manifestação"`, `"Sem Registros"`
+  - **Vermelho Claro** (`#FADBD8`): Contém `"Erro"`
+- Configura as larguras exatas para cada uma das 15 colunas.
+
+#### 4. Ajustes no Fluxo Principal (`main()`)
+- Remove a leitura antiga de registros do Excel legado.
+- Passa a armazenar chaves que falharem durante a varredura atual em um dicionário `erros_hoje = {}`.
+- No final da execução, chama `compilar_resultados_fiscais(erros_hoje=erros_hoje, cnpj_cert_ativo=cnpj_cert)` para coletar a lista de registros consolidados e envia a lista para `gerar_excel_resumo()`.
+- Remove a função `merge_resultados()` que se tornará obsoleta.
+
+### [rebuild_utils.py](file:///c:/Users/jejco/Desktop/Escavador%20de%20Pendencias/rebuild_utils.py)
+
+#### 1. Atualização da Função `rebuild_xml_consolidated_sheet(config)`
+- Detecta os dados do certificado ativo chamando `obter_dados_certificado()`.
+- Importa e invoca `compilar_resultados_fiscais(cnpj_cert_ativo=cnpj_cert)`.
+- Invoca `gerar_excel_resumo(resultados_compilados)` para regravar a planilha premium no Desktop.
+
+---
+
+## Verificação e Testes
+
+### Execução de Teste Manual da Reconstrução
+1. Executar o script utilitário `rebuild_utils.py` (ou acionar a reconstrução pelo painel web).
+2. Verificar se a planilha `nota_fiscal_xml.xlsx` é gerada com sucesso na Área de Trabalho com 15 colunas.
+3. Abrir a planilha e validar a estilização roxo premium, a exibição dos dados da nota real baixada (`53260538029534000113550010003683751196642687`), formatação de valores em reais (R$), alinhamento adequado de valores numéricos e textos, e o status consolidado de outros clientes.
