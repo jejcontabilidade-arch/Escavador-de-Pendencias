@@ -322,7 +322,7 @@ async function initWhatsAppClient() {
 
     // Evento de recepção de mensagens
     client.on('message', async (msg) => {
-        log(`Mensagem recebida de ${msg.from}: "${msg.body}"`);
+        log(`Mensagem recebida de ${msg.from}: type="${msg.type}" body="${msg.body}" hasMedia=${msg.hasMedia}`);
 
         let fromJid = msg.from;
         
@@ -358,8 +358,6 @@ async function initWhatsAppClient() {
         }
 
         const senderClean = senderPhoneNumber.replace(/\D/g, '');
-
-        log(`Repassando mensagem de ${senderClean} (JID: ${fromJid}) para o webhook Flask...`, 'INFO');
         
         // Monta o payload no formato esperado por agente_escavador.py (Z-API Mock)
         const webhookPayload = {
@@ -369,8 +367,29 @@ async function initWhatsAppClient() {
             }
         };
 
+        // Tratar mensagens de voz e áudio
+        if (msg.hasMedia && (msg.type === 'audio' || msg.type === 'voice' || msg.type === 'ptt')) {
+            try {
+                log(`Mensagem de voz/áudio detectada. Baixando mídia...`, 'INFO');
+                const media = await msg.downloadMedia();
+                if (media && media.data) {
+                    webhookPayload.audio = {
+                        data: media.data,
+                        mimetype: media.mimetype
+                    };
+                    log(`Mídia de áudio baixada com sucesso (${media.mimetype}).`, 'SUCCESS');
+                } else {
+                    log(`Aviso: Mídia retornada vazia para a mensagem de voz.`, 'WARNING');
+                }
+            } catch (err_media) {
+                log(`Erro ao baixar mídia de áudio: ${err_media.message}`, 'ERROR');
+            }
+        }
+
+        log(`Repassando mensagem de ${senderClean} (JID: ${fromJid}) para o webhook Flask...`, 'INFO');
+
         try {
-            const response = await axios.post('http://127.0.0.1:5000/api/webhook/whatsapp', webhookPayload, { timeout: 10000 });
+            const response = await axios.post('http://127.0.0.1:5000/api/webhook/whatsapp', webhookPayload, { timeout: 15000 });
             log(`Webhook Flask respondeu: ${response.status} ${JSON.stringify(response.data)}`, 'SUCCESS');
         } catch (err) {
             log(`Erro ao notificar webhook Flask: ${err.message}`, 'ERROR');

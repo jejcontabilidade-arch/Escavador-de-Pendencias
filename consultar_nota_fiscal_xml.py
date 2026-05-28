@@ -35,6 +35,76 @@ def log(msg, level="INFO"):
     except Exception:
         pass
 
+def focar_janela_certificado(keywords_browser):
+    import ctypes
+    EnumWindows = ctypes.windll.user32.EnumWindows
+    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+    GetWindowText = ctypes.windll.user32.GetWindowTextW
+    GetWindowTextLength = ctypes.windll.user32.GetWindowTextLengthW
+    IsWindowVisible = ctypes.windll.user32.IsWindowVisible
+    SetForegroundWindow = ctypes.windll.user32.SetForegroundWindow
+    ShowWindow = ctypes.windll.user32.ShowWindow
+    
+    found_hwnds = []
+    
+    def foreach_window(hwnd, lParam):
+        if IsWindowVisible(hwnd):
+            length = GetWindowTextLength(hwnd)
+            buff = ctypes.create_unicode_buffer(length + 1)
+            GetWindowText(hwnd, buff, length + 1)
+            title = buff.value
+            title_lower = title.lower()
+            
+            # 1. Diálogos de certificado ou segurança
+            if any(x in title_lower for x in ["certificado", "confirmar", "selecione", "segurança", "credential"]):
+                found_hwnds.append((hwnd, title, 2))
+            # 2. Janela do navegador da nossa automação
+            elif any(x in title_lower for x in keywords_browser):
+                found_hwnds.append((hwnd, title, 1))
+        return True
+
+    EnumWindows(EnumWindowsProc(foreach_window), 0)
+    
+    if not found_hwnds:
+        log("[AUTO-LOGIN] Nenhuma janela de certificado ou navegador encontrada para focar.", "WARNING")
+        return False
+        
+    found_hwnds.sort(key=lambda x: x[2], reverse=True)
+    target_hwnd, title, priority = found_hwnds[0]
+    
+    log(f"[AUTO-LOGIN] Focando na janela encontrada (Prioridade {priority}): '{title}'", "SYSTEM")
+    try:
+        # Simula toque no ALT para destravar SetForegroundWindow
+        ctypes.windll.user32.keybd_event(0x12, 0, 0, 0)
+        ctypes.windll.user32.keybd_event(0x12, 0, 2, 0)
+        ShowWindow(target_hwnd, 9) # SW_RESTORE
+        SetForegroundWindow(target_hwnd)
+        time.sleep(0.5)
+        return True
+    except Exception as e:
+        log(f"[AUTO-LOGIN] Erro ao focar janela: {e}", "WARNING")
+        return False
+
+def press_enter(first_char=None):
+    import ctypes
+    focar_janela_certificado(["nota fiscal", "nfe.fazenda", "chrome", "edge"])
+    if first_char:
+        char_upper = first_char.upper()
+        if len(char_upper) == 1 and (char_upper.isalnum() or char_upper == " "):
+            vk_code = ord(char_upper)
+            log(f"Enviando tecla '{char_upper}' (VK: {hex(vk_code)}) para focar no certificado...", "SYSTEM")
+            ctypes.windll.user32.keybd_event(vk_code, 0, 0, 0) # Key Down
+            time.sleep(0.05)
+            ctypes.windll.user32.keybd_event(vk_code, 0, 2, 0) # Key Up
+            time.sleep(0.5)
+            
+    log("Enviando comando ENTER para o Windows...", "SYSTEM")
+    VK_RETURN = 0x0D
+    ctypes.windll.user32.keybd_event(VK_RETURN, 0, 0, 0) # Key Down
+    ctypes.windll.user32.keybd_event(VK_RETURN, 0, 2, 0) # Key Up
+    log("ENTER enviado.", "SYSTEM")
+
+
 # Função para carregar as configurações locais
 def load_config():
     config_path = "config.json"
@@ -80,24 +150,25 @@ def enviar_whatsapp(mensagem, config, destinatario=None):
         log("Erro: Número de telefone do WhatsApp não configurado.", "ERROR")
         return False
         
-    url = "http://127.0.0.1:3000/api/send-message"
-    payload = {
-        "to": number,
-        "message": mensagem
-    }
-    
-    log(f"Enviando notificação WhatsApp para {number} via gateway local...", "INFO")
-    try:
-        response = requests.post(url, json=payload, timeout=15)
-        if response.status_code in [200, 201]:
-            log("Notificação via WhatsApp enviada com sucesso!", "SUCCESS")
-            return True
-        else:
-            log(f"Falha ao enviar WhatsApp. Status: {response.status_code}, Resposta: {response.text}", "ERROR")
-            return False
-    except Exception as e:
-        log(f"Erro ao enviar requisição HTTP do WhatsApp: {e}", "ERROR")
-        return False
+    def worker():
+        url = "http://127.0.0.1:3000/api/send-message"
+        payload = {
+            "to": number,
+            "message": mensagem
+        }
+        log(f"Enviando notificação WhatsApp para {number} via gateway local em segundo plano...", "INFO")
+        try:
+            response = requests.post(url, json=payload, timeout=15)
+            if response.status_code in [200, 201]:
+                log("Notificação via WhatsApp enviada com sucesso!", "SUCCESS")
+            else:
+                log(f"Falha ao enviar WhatsApp. Status: {response.status_code}, Resposta: {response.text}", "ERROR")
+        except Exception as e:
+            log(f"Erro ao enviar requisição HTTP do WhatsApp: {e}", "ERROR")
+
+    import threading
+    threading.Thread(target=worker, daemon=True).start()
+    return True
 
 # Limpar o nome da empresa para diretórios seguros
 def clean_filename(name):
@@ -186,6 +257,17 @@ def esperar_captcha(page, client_name, cnpj, step_name, config, destinatario=Non
     )
     enviar_whatsapp(msg_whatsapp, config, destinatario)
     
+    # Tentar clicar automaticamente no checkbox "Sou humano" do hCaptcha para agilizar a resolução
+    try:
+        log("Tentando localizar e clicar no checkbox do hCaptcha automaticamente...", "INFO")
+        iframe = page.frame_locator('iframe[title*="hCaptcha"], iframe[title*="hcaptcha"], iframe[src*="hcaptcha"]')
+        checkbox = iframe.locator('#checkbox, #anchor, .check, div[role="checkbox"]').first
+        checkbox.wait_for(state="visible", timeout=5000)
+        checkbox.click()
+        log("Checkbox do hCaptcha clicado automaticamente.", "SUCCESS")
+    except Exception as e_click:
+        log(f"Aviso ao tentar clicar no checkbox do hCaptcha (pode já estar clicado ou não visível): {e_click}", "WARNING")
+        
     limite_tempo = 300  # 5 minutos
     inicio = time.time()
     
@@ -237,7 +319,7 @@ def esperar_captcha(page, client_name, cnpj, step_name, config, destinatario=Non
 # Gerar planilha Excel bonita
 def gerar_excel_resumo(resultados):
     excel_path = "nota_fiscal_xml.xlsx"
-    desktop_path = r"C:\Users\jejco\Desktop\nota_fiscal_xml.xlsx"
+    desktop_path = os.path.join(os.path.expanduser("~"), "Desktop", "nota_fiscal_xml.xlsx")
     
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -313,6 +395,18 @@ def gerar_excel_resumo(resultados):
 
 def main():
     config = load_config()
+    
+    # Identificar primeira letra do certificado digital pelo arquivo .pfx
+    import glob
+    import re
+    pfx_files = glob.glob("*.pfx")
+    cert_first_char = "J"
+    if pfx_files:
+        filename = os.path.basename(pfx_files[0])
+        clean_name = re.sub(r"^\d+_", "", filename)
+        if clean_name:
+            cert_first_char = clean_name[0].upper()
+    log(f"Caractere inicial do certificado detectado para NF-e: '{cert_first_char}'", "INFO")
     
     # Parse de argumentos
     forcar_todos = "--forcar-todos" in sys.argv
@@ -435,7 +529,9 @@ def main():
                 channel="chrome",
                 args=[
                     "--disable-blink-features=AutomationControlled",
-                    "--disable-infobars"
+                    "--disable-infobars",
+                    "--disable-session-crashed-bubble",
+                    "--disable-features=BubbleSessionCrashedBubble"
                 ],
                 no_viewport=True
             )
@@ -447,10 +543,33 @@ def main():
         page = context.new_page()
         page.set_default_timeout(30000)
         
+        cert_confirmado = False
+        
         for idx, client in enumerate(clientes_para_processar):
             cnpj = client["cnpj"]
             nome = client["nome"]
             cnpj_clean = "".join(filter(str.isdigit, cnpj))
+            nome_limpo = clean_filename(nome)
+            
+            # Salva cópia do status antigo caso precise restaurar
+            status_path = os.path.join("documentos de nota fiscal xml", f"{cnpj_clean}_{nome_limpo}", "status_nota_fiscal_xml.json")
+            old_status = None
+            if os.path.exists(status_path):
+                try:
+                    with open(status_path, "r", encoding="utf-8") as f:
+                        old_status = json.load(f)
+                except Exception:
+                    pass
+                    
+            # Verificar se já possui arquivos XML baixados na pasta do cliente
+            caminho_pasta = os.path.join("documentos de nota fiscal xml", f"{cnpj_clean}_{nome_limpo}")
+            xmls_existentes = []
+            if os.path.exists(caminho_pasta):
+                try:
+                    xmls_existentes = [f for f in os.listdir(caminho_pasta) if f.endswith(".xml")]
+                except Exception:
+                    pass
+            possui_xml_existente = len(xmls_existentes) > 0
             
             log(f"--- Processando Cliente {idx+1}/{len(clientes_para_processar)}: {nome} (CNPJ: {cnpj}) ---", "INFO")
             salvar_estado_global(True, nome, total_clientes, processados, sucessos, falhas)
@@ -463,35 +582,79 @@ def main():
                 page.goto("https://www.nfe.fazenda.gov.br/portal/principal.aspx")
                 page.wait_for_load_state("networkidle")
                 
+                # Disparar thread de confirmação do certificado se ainda não confirmado nesta sessão
+                if not cert_confirmado:
+                    import threading
+                    def auto_confirm_dialog():
+                        time.sleep(4.0)
+                        log("[AUTO-LOGIN-NFE] Janela de seleção de certificado do Windows deve estar aberta. Simulando ENTER...", "SYSTEM")
+                        press_enter(cert_first_char)
+                        time.sleep(1.2)
+                        press_enter()
+                        
+                    threading.Thread(target=auto_confirm_dialog, daemon=True).start()
+                
                 # 2. Clicar em Manifestação Destinatário
                 log("Navegando para 'Manifestação Destinatário'...", "INFO")
                 link_selector = 'a[href*="manifestacao"], a:has-text("Manifestação Destinatário"), a:has-text("Manifestacao Destinatario")'
                 page.locator(link_selector).first.click()
                 page.wait_for_load_state("networkidle")
                 
+                # Marcar como confirmado após passar da navegação de manifestação sem dar erro
+                cert_confirmado = True
+                
                 # 3. Escolher a opção "Não tenho a Chave de Acesso"
                 try:
-                    # Seletor flexível para clicar na opção
-                    opcao_nao_tenho = page.locator('label:has-text("Não tenho a Chave de Acesso"), label:has-text("Nao tenho a Chave"), text="Não tenho a Chave de Acesso"').first
-                    opcao_nao_tenho.wait_for(state="visible", timeout=10000)
-                    log("Selecionando opção 'Não tenho a Chave de Acesso'...", "INFO")
-                    opcao_nao_tenho.click()
+                    rbt_sem_chave = page.locator('input#ctl00_ContentPlaceHolder1_rbtSemChave, input[value="rbtSemChave"]').first
+                    if rbt_sem_chave.is_visible(timeout=5000):
+                        log("Clicando diretamente no radio button 'Não tenho a Chave de Acesso'...", "INFO")
+                        rbt_sem_chave.click()
+                    else:
+                        opcao_nao_tenho = page.locator('label:has-text("Não tenho a Chave de Acesso"), label:has-text("Nao tenho a Chave"), text="Não tenho a Chave de Acesso"').first
+                        opcao_nao_tenho.wait_for(state="visible", timeout=5000)
+                        log("Selecionando opção 'Não tenho a Chave de Acesso' via label...", "INFO")
+                        opcao_nao_tenho.click()
                     time.sleep(1.5)
                 except Exception as e_opt:
                     log(f"Aviso ao selecionar opção 'Não tenho a Chave': {e_opt}", "WARNING")
                 
-                # 4. Preencher CNPJ
-                log("Preenchendo CNPJ do cliente...", "INFO")
-                cnpj_inputs = page.locator('input[name*="CNPJ"], input[name*="Cnpj"], input[id*="CNPJ"]').all()
-                if len(cnpj_inputs) == 1:
-                    log("Preenchendo CNPJ em campo único...", "INFO")
-                    cnpj_inputs[0].fill(cnpj_clean)
-                elif len(cnpj_inputs) >= 2:
-                    log("Preenchendo CNPJ em campos divididos (raiz / filial+digito)...", "INFO")
-                    cnpj_inputs[0].fill(cnpj_clean[:8])
-                    cnpj_inputs[1].fill(cnpj_clean[8:])
+                 # 4. Preencher CNPJ
+                log("Verificando campos de CNPJ do cliente...", "INFO")
+                cnpj_base_loc = page.locator('input#ctl00_ContentPlaceHolder1_iptCNPJBase, input[name*="iptCNPJBase"]')
+                cnpj_fim_loc = page.locator('input#ctl00_ContentPlaceHolder1_iptCNPJ, input[name="ctl00$ContentPlaceHolder1$iptCNPJ"]')
+                
+                is_readonly = False
+                cnpj_preenchido = ""
+                
+                if cnpj_base_loc.is_visible(timeout=5000):
+                    is_readonly = (
+                        cnpj_base_loc.is_disabled() or 
+                        cnpj_base_loc.get_attribute("readonly") == "readonly" or 
+                        cnpj_base_loc.get_attribute("disabled") == "disabled" or
+                        "aspNetDisabled" in (cnpj_base_loc.get_attribute("class") or "")
+                    )
+                    val_base = cnpj_base_loc.input_value() or ""
+                    val_fim = cnpj_fim_loc.input_value() or ""
+                    cnpj_preenchido = "".join(filter(str.isdigit, val_base + val_fim))
+                    
+                if is_readonly:
+                    log(f"Campos de CNPJ estão bloqueados/somente-leitura. CNPJ preenchido no portal: '{cnpj_preenchido}'", "INFO")
+                    if cnpj_preenchido == cnpj_clean:
+                        log("O CNPJ preenchido corresponde ao cliente atual. Prosseguindo sem preencher...", "SUCCESS")
+                    else:
+                        msg_erro = f"Certificado ativo no portal ({cnpj_preenchido}) é diferente do cliente ({cnpj_clean}) e o campo está bloqueado."
+                        log(f"[AVISO] {msg_erro}", "WARNING")
+                        raise Exception(msg_erro)
                 else:
-                    raise Exception("Campos de CNPJ não localizados na tela.")
+                    log("Campos de CNPJ editáveis. Preenchendo CNPJ do cliente...", "INFO")
+                    cnpj_inputs = page.locator('input[name*="CNPJ"], input[name*="Cnpj"], input[id*="CNPJ"]').all()
+                    if len(cnpj_inputs) == 1:
+                        cnpj_inputs[0].fill(cnpj_clean)
+                    elif len(cnpj_inputs) >= 2:
+                        cnpj_inputs[0].fill(cnpj_clean[:8])
+                        cnpj_inputs[1].fill(cnpj_clean[8:])
+                    else:
+                        raise Exception("Campos de CNPJ não localizados na tela.")
                     
                 # 5. Aguardar o CAPTCHA
                 captcha_ok = esperar_captcha(page, nome, cnpj, "Manifestação", config, destinatario)
@@ -506,9 +669,10 @@ def main():
                 
                 # 7. Verificar se não existem registros
                 time.sleep(2.5)
-                conteudo_pagina = page.locator("body").inner_text()
+                conteudo_html = page.content()
+                conteudo_visivel = page.locator("body").inner_text()
                 
-                if "Não existe registro para os dados informados" in conteudo_pagina:
+                if "Não existe registro para os dados informados" in conteudo_visivel:
                     log("Nenhum registro de manifestação encontrado para este cliente.", "INFO")
                     save_client_status_nota_fiscal_xml(cnpj, nome, "Sucesso", "Sem Registros")
                     sucessos += 1
@@ -521,13 +685,13 @@ def main():
                     gerar_excel_resumo(resultados_excel_hoje)
                     continue
                     
-                # 8. Copiar chaves de acesso (44 dígitos)
-                chaves = list(dict.fromkeys(re.findall(r'\b\d{44}\b', conteudo_pagina)))
+                # 8. Copiar chaves de acesso (44 dígitos) buscando em todo o HTML
+                chaves = list(dict.fromkeys(re.findall(r'\b\d{44}\b', conteudo_html)))
                 
                 if not chaves:
                     log("Aviso: Chave de acesso não localizada na página. Verifique manualmente.", "WARNING")
                     msg_erro = "Chave de acesso não localizada na página."
-                    if "Erro" in conteudo_pagina:
+                    if "Erro" in conteudo_visivel:
                         msg_erro = "Erro reportado pelo portal na consulta."
                     raise Exception(msg_erro)
                     
@@ -592,16 +756,38 @@ def main():
                         
                 if chaves_baixadas > 0:
                     save_client_status_nota_fiscal_xml(cnpj, nome, "Sucesso", f"Baixados {chaves_baixadas} chaves")
+                    sucessos += 1
                 else:
-                    save_client_status_nota_fiscal_xml(cnpj, nome, "Erro", "Chaves encontradas, mas nenhuma baixada")
+                    forcar_todos = "--forcar-todos" in sys.argv
+                    if not forcar_todos and possui_xml_existente:
+                        log(f"[RECOVERY] Nenhuma chave nova baixada para {nome} ({cnpj}), mas mantendo os XMLs existentes e ignorando a falha.", "SUCCESS")
+                        status_restaurado = "Sucesso"
+                        detalhes_restaurados = "Preservado (Erro no download das novas chaves)"
+                        if old_status and old_status.get("status") == "Sucesso":
+                            detalhes_restaurados = old_status.get("detalhes", detalhes_restaurados)
+                        save_client_status_nota_fiscal_xml(cnpj, nome, status_restaurado, detalhes_restaurados)
+                        sucessos += 1
+                    else:
+                        save_client_status_nota_fiscal_xml(cnpj, nome, "Erro", "Chaves encontradas, mas nenhuma baixada")
+                        falhas += 1
                     
-                sucessos += 1
                 processados += 1
                 
             except Exception as err_cliente:
-                log(f"Erro no processamento do cliente {nome}: {err_cliente}", "ERROR")
-                save_client_status_nota_fiscal_xml(cnpj, nome, "Erro", str(err_cliente))
-                falhas += 1
+                forcar_todos = "--forcar-todos" in sys.argv
+                if not forcar_todos and possui_xml_existente:
+                    log(f"[RECOVERY] Falha ao processar {nome} ({cnpj}), mas mantendo os XMLs existentes e ignorando o erro de consulta.", "SUCCESS")
+                    status_restaurado = "Sucesso"
+                    detalhes_restaurados = "Preservado (Erro na nova consulta)"
+                    if old_status and old_status.get("status") == "Sucesso":
+                        detalhes_restaurados = old_status.get("detalhes", detalhes_restaurados)
+                    save_client_status_nota_fiscal_xml(cnpj, nome, status_restaurado, detalhes_restaurados)
+                    sucessos += 1
+                else:
+                    log(f"Erro no processamento do cliente {nome}: {err_cliente}", "ERROR")
+                    save_client_status_nota_fiscal_xml(cnpj, nome, "Erro", str(err_cliente))
+                    falhas += 1
+                
                 processados += 1
                 
                 resultados_excel_hoje.append([cnpj, nome, "N/A", f"Erro: {str(err_cliente)[:50]}", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")])

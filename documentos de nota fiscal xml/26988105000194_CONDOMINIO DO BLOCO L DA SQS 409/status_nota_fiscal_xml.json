@@ -1,0 +1,9 @@
+{
+    "cnpj": "26988105000194",
+    "nome": "CONDOMINIO DO BLOCO L DA SQS 409",
+    "data_consulta": "2026-05-28",
+    "hora_consulta": "09:10:13",
+    "status": "Erro",
+    "detalhes": "Page.goto: Target page, context or browser has been closed",
+    "contador_falhas_hoje": 1
+}

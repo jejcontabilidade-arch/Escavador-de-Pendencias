@@ -31,6 +31,125 @@ processo_automacao = None
 processo_nota_fiscal_xml = None
 processo_gateway = None
 
+def is_process_running_by_script(script_name):
+    """
+    Verifica se existe algum processo Python em execução com o nome do script
+    especificado em sua linha de comando (excluindo este próprio processo do Flask).
+    Retorna (True, [pids]) se houver, ou (False, []) caso contrário.
+    """
+    import subprocess
+    import os
+    current_pid = os.getpid()
+    
+    # Monta comando PowerShell para listar processos Python cujo CommandLine contenha o nome do script
+    cmd = (
+        f'powershell -NoProfile -Command "'
+        f'Get-CimInstance Win32_Process -Filter \\"Name like \'%python%\'\\" '
+        f'| Where-Object {{ $_.CommandLine -like \\"*{script_name}*\\" -and $_.ProcessId -ne {current_pid} }} '
+        f'| Select-Object -ExpandProperty ProcessId"'
+    )
+    try:
+        res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+        lines = res.stdout.strip().split()
+        pids = [int(line) for line in lines if line.isdigit()]
+        return len(pids) > 0, pids
+    except Exception:
+        pass
+    return False, []
+
+def assign_current_process_to_job_object():
+    """
+    Cria um Job Object no Windows e associa o processo atual (Flask) a ele.
+    Configura o Job Object com JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
+    Isso garante que se o processo do Flask for encerrado (seja via console,
+    taskkill ou clicando no 'X'), o Windows encerrará automaticamente todos
+    os subprocessos filhos (como executar.py, consultar_nota_fiscal_xml.py e Chrome).
+    """
+    import os
+    if os.name != 'nt':
+        return
+        
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        # Constante do Windows
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+        
+        # Estruturas do ctypes
+        class IO_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("ReadOperationCount", ctypes.c_uint64),
+                ("WriteOperationCount", ctypes.c_uint64),
+                ("OtherOperationCount", ctypes.c_uint64),
+                ("ReadTransferCount", ctypes.c_uint64),
+                ("WriteTransferCount", ctypes.c_uint64),
+                ("OtherTransferCount", ctypes.c_uint64),
+            ]
+            
+        class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", wintypes.LARGE_INTEGER),
+                ("PerJobUserTimeLimit", wintypes.LARGE_INTEGER),
+                ("LimitFlags", wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+            
+        class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
+                ("IoInfo", IO_COUNTERS),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+            
+        # Obter handles
+        kernel32 = ctypes.windll.kernel32
+        
+        # Criar o Job Object
+        h_job = kernel32.CreateJobObjectW(None, None)
+        if not h_job:
+            print("[JOB-OBJECT] Falha ao criar Job Object.")
+            return
+            
+        # Configurar informações de limite
+        limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        
+        # SetInformationJobObject
+        ret = kernel32.SetInformationJobObject(
+            h_job,
+            9, # JobObjectExtendedLimitInformation
+            ctypes.byref(limits),
+            ctypes.sizeof(limits)
+        )
+        if not ret:
+            print("[JOB-OBJECT] Falha ao configurar limites do Job Object.")
+            return
+            
+        # Associar o processo atual (Flask) ao Job Object
+        h_process = kernel32.GetCurrentProcess()
+        ret = kernel32.AssignProcessToJobObject(h_job, h_process)
+        if not ret:
+            err = kernel32.GetLastError()
+            print(f"[JOB-OBJECT] Aviso: Não foi possível associar ao Job Object. Código de erro: {err}")
+        else:
+            print("[JOB-OBJECT] Processo atual associado com sucesso ao Job Object (Auto-Kill habilitado).")
+            
+            # Manter referência global para evitar garbage collection do handle
+            global _global_job_handle
+            _global_job_handle = h_job
+            
+    except Exception as e:
+        print(f"[JOB-OBJECT] Erro ao configurar Job Object: {e}")
+
 def load_config():
     config_path = "config.json"
     private_config_path = "config_private.json"
@@ -129,18 +248,30 @@ def encerrar_servidor():
     # 1. Interromper a automação se estiver rodando para não deixar navegadores abertos
     try:
         global processo_automacao
+        rodando, pids = is_process_running_by_script("executar.py")
+        pids_to_kill = set(pids)
         if processo_automacao and processo_automacao.poll() is None:
-            print("Encerrando processo de automação ativo...")
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_automacao.pid)], capture_output=True)
+            pids_to_kill.add(processo_automacao.pid)
+            
+        if pids_to_kill:
+            print(f"Encerrando {len(pids_to_kill)} processo(s) de automação ativo(s)...")
+            for pid in pids_to_kill:
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
     except Exception as e:
         print(f"Erro ao parar a automação no encerramento: {e}")
         
     # 1b. Interromper a Nota Fiscal XML se estiver rodando
     try:
         global processo_nota_fiscal_xml
+        rodando_xml, pids_xml = is_process_running_by_script("consultar_nota_fiscal_xml.py")
+        pids_xml_to_kill = set(pids_xml)
         if processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None:
-            print("Encerrando processo de Nota Fiscal XML ativo...")
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_nota_fiscal_xml.pid)], capture_output=True)
+            pids_xml_to_kill.add(processo_nota_fiscal_xml.pid)
+            
+        if pids_xml_to_kill:
+            print(f"Encerrando {len(pids_xml_to_kill)} processo(s) de Nota Fiscal XML ativo(s)...")
+            for pid in pids_xml_to_kill:
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
     except Exception as e:
         print(f"Erro ao parar a Nota Fiscal XML no encerramento: {e}")
         
@@ -741,7 +872,8 @@ def importar_clientes():
 def iniciar_automacao():
     global processo_automacao
     
-    if processo_automacao and processo_automacao.poll() is None:
+    rodando, _ = is_process_running_by_script("executar.py")
+    if rodando or (processo_automacao and processo_automacao.poll() is None):
         return jsonify({"status": "error", "message": "A automação já está em execução."}), 400
         
     dados = request.json or {}
@@ -780,19 +912,20 @@ def iniciar_automacao():
 @app.route("/api/executar/parar", methods=["POST"])
 def parar_automacao():
     global processo_automacao
+    rodando, pids = is_process_running_by_script("executar.py")
+    
+    pids_to_kill = set(pids)
     if processo_automacao and processo_automacao.poll() is None:
+        pids_to_kill.add(processo_automacao.pid)
+        
+    if pids_to_kill:
         try:
-            # Taskkill força a interrupção da árvore de processos, fechando o Chrome e drivers do Playwright
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_automacao.pid)], capture_output=True)
+            for pid in pids_to_kill:
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
             processo_automacao = None
             return jsonify({"status": "success", "message": "Automação interrompida com sucesso!"})
         except Exception as e:
-            try:
-                processo_automacao.terminate()
-                processo_automacao = None
-                return jsonify({"status": "success", "message": "Sinal de encerramento enviado."})
-            except Exception as ex:
-                return jsonify({"status": "error", "message": f"Erro ao encerrar processo: {str(ex)}"}), 500
+            return jsonify({"status": "error", "message": f"Erro ao encerrar processo: {str(e)}"}), 500
     else:
         return jsonify({"status": "error", "message": "Nenhuma automação em execução no momento."}), 400
 
@@ -801,7 +934,8 @@ def parar_automacao():
 def iniciar_nota_fiscal_xml():
     global processo_nota_fiscal_xml
     
-    if processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None:
+    rodando, _ = is_process_running_by_script("consultar_nota_fiscal_xml.py")
+    if rodando or (processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None):
         return jsonify({"status": "error", "message": "A consulta de Nota Fiscal XML já está em execução."}), 400
         
     dados = request.json or {}
@@ -835,7 +969,13 @@ def iniciar_nota_fiscal_xml():
 @app.route("/api/nota_fiscal_xml/parar", methods=["POST"])
 def parar_nota_fiscal_xml():
     global processo_nota_fiscal_xml
+    rodando, pids = is_process_running_by_script("consultar_nota_fiscal_xml.py")
+    
+    pids_to_kill = set(pids)
     if processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None:
+        pids_to_kill.add(processo_nota_fiscal_xml.pid)
+        
+    if pids_to_kill:
         try:
             import subprocess
             # Fechar Chrome do perfil de Nota Fiscal XML antes do taskkill principal para liberar lock
@@ -847,7 +987,8 @@ def parar_nota_fiscal_xml():
             )
             subprocess.run(cmd_chrome, shell=True, capture_output=True)
             
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_nota_fiscal_xml.pid)], capture_output=True)
+            for pid in pids_to_kill:
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
             processo_nota_fiscal_xml = None
             
             # Limpar SingletonLock
@@ -859,19 +1000,16 @@ def parar_nota_fiscal_xml():
                     pass
             return jsonify({"status": "success", "message": "Consulta de Nota Fiscal XML interrompida com sucesso!"})
         except Exception as e:
-            try:
-                processo_nota_fiscal_xml.terminate()
-                processo_nota_fiscal_xml = None
-                return jsonify({"status": "success", "message": "Sinal de encerramento enviado."})
-            except Exception as ex:
-                return jsonify({"status": "error", "message": f"Erro ao encerrar processo: {str(ex)}"}), 500
+            return jsonify({"status": "error", "message": f"Erro ao encerrar processo: {str(e)}"}), 500
     else:
         return jsonify({"status": "error", "message": "Nenhuma consulta de Nota Fiscal XML em execução no momento."}), 400
  
 @app.route("/api/nota_fiscal_xml/status", methods=["GET"])
 def obter_status_nota_fiscal_xml():
     global processo_nota_fiscal_xml
-    rodando = processo_nota_fiscal_xml is not None and processo_nota_fiscal_xml.poll() is None
+    rodando, _ = is_process_running_by_script("consultar_nota_fiscal_xml.py")
+    if not rodando:
+        rodando = processo_nota_fiscal_xml is not None and processo_nota_fiscal_xml.poll() is None
     
     state_file = "temp/state_nota_fiscal_xml.json"
     today = datetime.date.today().strftime("%Y-%m-%d")
@@ -924,12 +1062,18 @@ def webhook_whatsapp():
         try:
             import agente_escavador
             config = load_config()
-            rodando = processo_automacao is not None and processo_automacao.poll() is None
-            rodando_nota_fiscal_xml = processo_nota_fiscal_xml is not None and processo_nota_fiscal_xml.poll() is None
+            rodando, _ = is_process_running_by_script("executar.py")
+            if not rodando:
+                rodando = processo_automacao is not None and processo_automacao.poll() is None
+                
+            rodando_nota_fiscal_xml, _ = is_process_running_by_script("consultar_nota_fiscal_xml.py")
+            if not rodando_nota_fiscal_xml:
+                rodando_nota_fiscal_xml = processo_nota_fiscal_xml is not None and processo_nota_fiscal_xml.poll() is None
             
             def iniciar_callback(forcar_todos=False):
                 global processo_automacao
-                if processo_automacao and processo_automacao.poll() is None:
+                rodando_teste, _ = is_process_running_by_script("executar.py")
+                if rodando_teste or (processo_automacao and processo_automacao.poll() is None):
                     return False
                 cmd = [sys.executable, "executar.py"]
                 if forcar_todos:
@@ -955,23 +1099,25 @@ def webhook_whatsapp():
                 
             def parar_callback():
                 global processo_automacao
+                rodando_teste, pids = is_process_running_by_script("executar.py")
+                pids_to_kill = set(pids)
                 if processo_automacao and processo_automacao.poll() is None:
+                    pids_to_kill.add(processo_automacao.pid)
+                    
+                if pids_to_kill:
                     try:
-                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_automacao.pid)], capture_output=True)
+                        for pid in pids_to_kill:
+                            subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
                         processo_automacao = None
                         return True
                     except Exception:
-                        try:
-                            processo_automacao.terminate()
-                            processo_automacao = None
-                            return True
-                        except Exception:
-                            pass
+                        pass
                 return False
-
+ 
             def iniciar_xml_callback(forcar_todos=False, destinatario=None):
                 global processo_nota_fiscal_xml
-                if processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None:
+                rodando_teste, _ = is_process_running_by_script("consultar_nota_fiscal_xml.py")
+                if rodando_teste or (processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None):
                     return False
                 cmd = [sys.executable, "consultar_nota_fiscal_xml.py"]
                 if forcar_todos:
@@ -999,27 +1145,32 @@ def webhook_whatsapp():
                 
             def parar_xml_callback():
                 global processo_nota_fiscal_xml
+                rodando_teste, pids = is_process_running_by_script("consultar_nota_fiscal_xml.py")
+                
+                # Fechar Chrome do perfil de Nota Fiscal XML
+                try:
+                    cmd_chrome = (
+                        'powershell -NoProfile -Command "'
+                        'Get-CimInstance Win32_Process -Filter \\"Name = \'chrome.exe\' or Name = \'chromedriver.exe\'\\" '
+                        '| Where-Object { $_.CommandLine -like \'*chrome_profile_nota_fiscal_xml*\' } '
+                        '| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
+                    )
+                    subprocess.run(cmd_chrome, shell=True, capture_output=True)
+                except Exception:
+                    pass
+                
+                pids_to_kill = set(pids)
                 if processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None:
+                    pids_to_kill.add(processo_nota_fiscal_xml.pid)
+                    
+                if pids_to_kill:
                     try:
-                        import subprocess
-                        cmd_chrome = (
-                            'powershell -NoProfile -Command "'
-                            'Get-CimInstance Win32_Process -Filter \\"Name = \'chrome.exe\' or Name = \'chromedriver.exe\'\\" '
-                            '| Where-Object { $_.CommandLine -like \'*chrome_profile_nota_fiscal_xml*\' } '
-                            '| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
-                        )
-                        subprocess.run(cmd_chrome, shell=True, capture_output=True)
-                        
-                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(processo_nota_fiscal_xml.pid)], capture_output=True)
+                        for pid in pids_to_kill:
+                            subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
                         processo_nota_fiscal_xml = None
                         return True
                     except Exception:
-                        try:
-                            processo_nota_fiscal_xml.terminate()
-                            processo_nota_fiscal_xml = None
-                            return True
-                        except Exception:
-                            pass
+                        pass
                 return False
                 
             agente_escavador.processar_mensagem_recebida(
@@ -1041,7 +1192,9 @@ def webhook_whatsapp():
 @app.route("/api/executar/status", methods=["GET"])
 def obter_status():
     global processo_automacao
-    rodando = processo_automacao is not None and processo_automacao.poll() is None
+    rodando, _ = is_process_running_by_script("executar.py")
+    if not rodando:
+        rodando = processo_automacao is not None and processo_automacao.poll() is None
     
     today = datetime.date.today().strftime("%Y-%m-%d")
     log_file = os.path.join("logs", f"execucao_{today}.log")
@@ -1169,7 +1322,7 @@ def listar_relatorios():
     relatorios_list = []
     
     # 1. Adicionar o Painel Consolidado do Desktop
-    desktop_excel = r"C:\Users\jejco\Desktop\Painel_Consolidado_Pendencias_eCAC.xlsx"
+    desktop_excel = os.path.join(os.path.expanduser("~"), "Desktop", "Painel_Consolidado_Pendencias_eCAC.xlsx")
     if os.path.exists(desktop_excel):
         try:
             size = os.path.getsize(desktop_excel)
@@ -1253,7 +1406,7 @@ def listar_relatorios_nota_fiscal_xml():
     relatorios_list = []
     
     # 1. Adicionar o Painel Consolidado do Desktop
-    desktop_excel = r"C:\Users\jejco\Desktop\nota_fiscal_xml.xlsx"
+    desktop_excel = os.path.join(os.path.expanduser("~"), "Desktop", "nota_fiscal_xml.xlsx")
     if os.path.exists(desktop_excel):
         try:
             size = os.path.getsize(desktop_excel)
@@ -1335,7 +1488,13 @@ def baixar_relatorio(caminho_completo):
     
     # Se o caminho for do desktop para e-CAC
     if caminho_completo == "desktop/Painel_Consolidado_Pendencias_eCAC.xlsx":
-        desktop_excel = r"C:\Users\jejco\Desktop\Painel_Consolidado_Pendencias_eCAC.xlsx"
+        try:
+            from rebuild_utils import rebuild_ecac_consolidated_sheet
+            rebuild_ecac_consolidated_sheet(config)
+        except Exception as e_rebuild:
+            print(f"Erro ao regenerar consolidado e-CAC antes do download: {e_rebuild}")
+            
+        desktop_excel = os.path.join(os.path.expanduser("~"), "Desktop", "Painel_Consolidado_Pendencias_eCAC.xlsx")
         if os.path.exists(desktop_excel):
             return send_file(desktop_excel, as_attachment=True)
         else:
@@ -1343,7 +1502,13 @@ def baixar_relatorio(caminho_completo):
 
     # Se o caminho for do desktop para Nota Fiscal XML
     if caminho_completo == "desktop/nota_fiscal_xml.xlsx":
-        desktop_excel = r"C:\Users\jejco\Desktop\nota_fiscal_xml.xlsx"
+        try:
+            from rebuild_utils import rebuild_xml_consolidated_sheet
+            rebuild_xml_consolidated_sheet(config)
+        except Exception as e_rebuild:
+            print(f"Erro ao regenerar consolidado NF-e XML antes do download: {e_rebuild}")
+            
+        desktop_excel = os.path.join(os.path.expanduser("~"), "Desktop", "nota_fiscal_xml.xlsx")
         if os.path.exists(desktop_excel):
             return send_file(desktop_excel, as_attachment=True)
         else:
@@ -1485,6 +1650,9 @@ def api_whatsapp_desconectar():
         return jsonify({"status": "error", "message": f"Erro ao desconectar: {str(e)}"}), 500
 
 if __name__ == "__main__":
+    # Garantir auto-kill de processos filhos no encerramento (Job Object)
+    assign_current_process_to_job_object()
+    
     # Garantir que a pasta de logs e templates exista
     os.makedirs("logs", exist_ok=True)
     os.makedirs("templates", exist_ok=True)

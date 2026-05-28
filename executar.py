@@ -47,7 +47,7 @@ def limpar_processos_automatizados_antigos():
     cmd = (
         'powershell -NoProfile -Command "'
         'Get-CimInstance Win32_Process -Filter \\"Name = \'chrome.exe\' or Name = \'msedge.exe\' or Name = \'chromedriver.exe\' or Name = \'msedgedriver.exe\'\\" '
-        '| Where-Object { $_.CommandLine -like \'*chrome_profile_*\' } '
+        '| Where-Object { $_.CommandLine -like \'*chrome_profile_chrome*\' or $_.CommandLine -like \'*chrome_profile_msedge*\' or $_.CommandLine -like \'*chrome_profile_chromium*\' } '
         '| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
     )
     try:
@@ -67,17 +67,66 @@ def limpar_processos_automatizados_antigos():
                 log(f"Aviso ao remover {lock_path} (pode já ter sido destravado): {e}", "WARNING")
 
 # Enviar o caractere inicial (se fornecido) e depois a tecla ENTER para o Windows
+def focar_janela_certificado(keywords_browser):
+    EnumWindows = ctypes.windll.user32.EnumWindows
+    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+    GetWindowText = ctypes.windll.user32.GetWindowTextW
+    GetWindowTextLength = ctypes.windll.user32.GetWindowTextLengthW
+    IsWindowVisible = ctypes.windll.user32.IsWindowVisible
+    SetForegroundWindow = ctypes.windll.user32.SetForegroundWindow
+    ShowWindow = ctypes.windll.user32.ShowWindow
+    
+    found_hwnds = []
+    
+    def foreach_window(hwnd, lParam):
+        if IsWindowVisible(hwnd):
+            length = GetWindowTextLength(hwnd)
+            buff = ctypes.create_unicode_buffer(length + 1)
+            GetWindowText(hwnd, buff, length + 1)
+            title = buff.value
+            title_lower = title.lower()
+            
+            # 1. Diálogos de certificado ou segurança
+            if any(x in title_lower for x in ["certificado", "confirmar", "selecione", "segurança", "credential"]):
+                found_hwnds.append((hwnd, title, 2))
+            # 2. Janela do navegador da nossa automação
+            elif any(x in title_lower for x in keywords_browser):
+                found_hwnds.append((hwnd, title, 1))
+        return True
+
+    EnumWindows(EnumWindowsProc(foreach_window), 0)
+    
+    if not found_hwnds:
+        log("[AUTO-LOGIN] Nenhuma janela de certificado ou navegador encontrada para focar.", "WARNING")
+        return False
+        
+    found_hwnds.sort(key=lambda x: x[2], reverse=True)
+    target_hwnd, title, priority = found_hwnds[0]
+    
+    log(f"[AUTO-LOGIN] Focando na janela encontrada (Prioridade {priority}): '{title}'", "SYSTEM")
+    try:
+        # Simula toque no ALT para destravar SetForegroundWindow
+        ctypes.windll.user32.keybd_event(0x12, 0, 0, 0)
+        ctypes.windll.user32.keybd_event(0x12, 0, 2, 0)
+        ShowWindow(target_hwnd, 9) # SW_RESTORE
+        SetForegroundWindow(target_hwnd)
+        time.sleep(0.5)
+        return True
+    except Exception as e:
+        log(f"[AUTO-LOGIN] Erro ao focar janela: {e}", "WARNING")
+        return False
+
 def press_enter(first_char=None):
+    focar_janela_certificado(["e-cac", "cav.receita", "receita federal", "chrome", "edge"])
     if first_char:
         char_upper = first_char.upper()
-        # Apenas converte se for uma letra de A-Z ou número de 0-9
         if len(char_upper) == 1 and (char_upper.isalnum() or char_upper == " "):
             vk_code = ord(char_upper)
             log(f"Enviando tecla '{char_upper}' (VK: {hex(vk_code)}) para focar no certificado...", "SYSTEM")
             ctypes.windll.user32.keybd_event(vk_code, 0, 0, 0) # Key Down
             time.sleep(0.05)
             ctypes.windll.user32.keybd_event(vk_code, 0, 2, 0) # Key Up
-            time.sleep(0.5) # Pequeno atraso para a seleção atualizar na tela
+            time.sleep(0.5)
             
     log("Enviando comando ENTER para o Windows...", "SYSTEM")
     VK_RETURN = 0x0D
@@ -1585,7 +1634,9 @@ def realizar_login_manual(config):
             "headless": False,
             "args": [
                 "--disable-blink-features=AutomationControlled",
-                "--disable-infobars"
+                "--disable-infobars",
+                "--disable-session-crashed-bubble",
+                "--disable-features=BubbleSessionCrashedBubble"
             ],
             "no_viewport": True
         }
@@ -1716,28 +1767,29 @@ def enviar_whatsapp(mensagem, config):
         log("Erro: Número de telefone do WhatsApp não configurado.", "ERROR")
         return False
         
-    url = "http://127.0.0.1:3000/api/send-message"
-    payload = {
-        "to": number,
-        "message": mensagem
-    }
-    
-    log("Enviando notificação WhatsApp via gateway local...", "INFO")
-    try:
-        response = requests.post(url, json=payload, timeout=15)
-        if response.status_code in [200, 201]:
-            log("Notificação via WhatsApp enviada com sucesso!", "SUCCESS")
-            return True
-        else:
-            log(f"Falha ao enviar WhatsApp. Status: {response.status_code}, Resposta: {response.text}", "ERROR")
-            return False
-    except Exception as e:
-        log(f"Erro ao enviar requisição HTTP do WhatsApp: {e}", "ERROR")
-        return False
+    def worker():
+        url = "http://127.0.0.1:3000/api/send-message"
+        payload = {
+            "to": number,
+            "message": mensagem
+        }
+        log("Enviando notificação WhatsApp via gateway local em segundo plano...", "INFO")
+        try:
+            response = requests.post(url, json=payload, timeout=15)
+            if response.status_code in [200, 201]:
+                log("Notificação via WhatsApp enviada com sucesso!", "SUCCESS")
+            else:
+                log(f"Falha ao enviar WhatsApp. Status: {response.status_code}, Resposta: {response.text}", "ERROR")
+        except Exception as e:
+            log(f"Erro ao enviar requisição HTTP do WhatsApp: {e}", "ERROR")
+
+    import threading
+    threading.Thread(target=worker, daemon=True).start()
+    return True
 
 def atualizar_excel_dinamico(clientes, config):
     try:
-        desktop_dir = r"C:\Users\jejco\Desktop"
+        desktop_dir = os.path.join(os.path.expanduser("~"), "Desktop")
         desktop_excel_fixed = os.path.join(desktop_dir, "Painel_Consolidado_Pendencias_eCAC.xlsx")
         # Atualiza diretamente o arquivo fixo e único na Area de Trabalho, sem gerar cópias datadas.
         gerar_consolidado_excel(clientes, config.get("relatorios_dir", "relatorios"), desktop_excel_fixed)
@@ -1855,7 +1907,9 @@ def main():
                     "headless": config["headless"],
                     "args": [
                         "--disable-blink-features=AutomationControlled",
-                        "--disable-infobars"
+                        "--disable-infobars",
+                        "--disable-session-crashed-bubble",
+                        "--disable-features=BubbleSessionCrashedBubble"
                     ],
                     "no_viewport": True
                 }
@@ -1950,11 +2004,23 @@ def main():
                     client_dir = os.path.join(config["relatorios_dir"], f"{cnpj_limpo}_{nome_limpo}")
                     status_path = os.path.join(client_dir, "status.json")
                     
+                    # Salva cópia do status antigo caso precise restaurar
+                    old_status = None
+                    if os.path.exists(status_path):
+                        try:
+                            with open(status_path, "r", encoding="utf-8") as f:
+                                old_status = json.load(f)
+                        except Exception:
+                            pass
+                            
                     forcar_todos = "--forcar-todos" in sys.argv
                     
                     # 1. Verificar se já existem arquivos de regularidade (Certidão ou Informativo Regular) na pasta do cliente
                     cnd_pdfs = glob.glob(os.path.join(client_dir, "CertidaoRegularidadeFiscal-*.pdf"))
                     cnd_txts = glob.glob(os.path.join(client_dir, "Sem_Pendencias_Fiscais_Regular-*.txt"))
+                    relatorio_pdfs = glob.glob(os.path.join(client_dir, "RelatorioSituacaoFiscal-*.pdf"))
+                    
+                    possui_registro_existente = len(cnd_pdfs) > 0 or len(cnd_txts) > 0 or len(relatorio_pdfs) > 0
                     
                     if not forcar_todos and (cnd_pdfs or cnd_txts):
                         log(f"Cliente {nome} ({cnpj}) já possui Certidão/Regularidade ativa na pasta do cliente. Pulando consulta no e-CAC.", "SUCCESS")
@@ -2014,8 +2080,9 @@ def main():
                     client_dir = save_client_status(config["relatorios_dir"], cnpj, nome, "Pendente", "Iniciado")
                     enviar_whatsapp(f"🤖 *Processando*: {nome} ({cnpj})", config)
                     
-                    # Limpar todos os arquivos e pastas da execução anterior antes de iniciar varredura
-                    remover_arquivos_fiscais_obsoletos(client_dir)
+                    # Limpar todos os arquivos e pastas se for varredura completa. Se não, mantemos para caso de erro.
+                    if forcar_todos:
+                        remover_arquivos_fiscais_obsoletos(client_dir)
                         
                     max_tentativas = 1
                     sucesso_cliente = False
@@ -2178,14 +2245,30 @@ def main():
                                 break
                                 
                     if not sucesso_cliente:
-                        log(f"[FALHA FINAL] Não foi possível processar o cliente {nome} ({cnpj}) após {max_tentativas} tentativas.", "ERROR")
-                        # Salvar log de erro definitivo
-                        try:
-                            save_client_status(config["relatorios_dir"], cnpj, nome, "Erro", str(erro_final))
-                            enviar_whatsapp(f"❌ *Falha*: {nome} - {str(erro_final)}\n• *Página do Erro*: {url_erro}", config)
-                        except Exception as save_err:
-                            log(f"Não foi possível salvar status de erro para o cliente: {save_err}", "WARNING")
-                        failure_count += 1
+                        # Se não for varredura forçada completa e já tivermos um registro/PDF salvo na pasta,
+                        # nós pulamos o erro, restauramos o status de Sucesso e preservamos os arquivos!
+                        if not forcar_todos and possui_registro_existente:
+                            log(f"[RECOVERY] Falha ao processar {nome} ({cnpj}), mas mantendo o registro existente de CND/Relatório e ignorando o erro de consulta.", "SUCCESS")
+                            
+                            status_restaurado = "Sucesso"
+                            detalhes_restaurados = "Preservado (Erro na nova consulta)"
+                            if old_status and old_status.get("status") == "Sucesso":
+                                detalhes_restaurados = old_status.get("detalhes", detalhes_restaurados)
+                            
+                            try:
+                                save_client_status(config["relatorios_dir"], cnpj, nome, status_restaurado, detalhes_restaurados)
+                            except Exception as save_err:
+                                log(f"Não foi possível restaurar status de sucesso: {save_err}", "WARNING")
+                            success_count += 1
+                        else:
+                            log(f"[FALHA FINAL] Não foi possível processar o cliente {nome} ({cnpj}) após {max_tentativas} tentativas.", "ERROR")
+                            # Salvar log de erro definitivo
+                            try:
+                                save_client_status(config["relatorios_dir"], cnpj, nome, "Erro", str(erro_final))
+                                enviar_whatsapp(f"❌ *Falha*: {nome} - {str(erro_final)}\n• *Página do Erro*: {url_erro}", config)
+                            except Exception as save_err:
+                                log(f"Não foi possível salvar status de erro para o cliente: {save_err}", "WARNING")
+                            failure_count += 1
                     
                     # Atualiza a planilha Excel de forma dinâmica após processar o cliente
                     try:
