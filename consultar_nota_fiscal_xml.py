@@ -356,14 +356,91 @@ def salvar_estado_global(rodando, empresa_atual, total, processados, sucessos, f
     except Exception as e:
         log(f"Erro ao salvar state_nota_fiscal_xml.json: {e}", "WARNING")
 
+def resolver_captcha_com_openai(caminho_imagem, pergunta, is_hcaptcha, config):
+    openai_key = config.get("openai_api_key", "").strip()
+    if not openai_key:
+        log("OpenAI API Key não encontrada no config_private.json. Resolução por IA indisponível.", "WARNING")
+        return None
+        
+    try:
+        import base64
+        with open(caminho_imagem, "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+            
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {openai_key}"
+        }
+        
+        prompt = f"""Você é um especialista em acessibilidade e resolução de captchas de imagem (hCaptcha/reCAPTCHA).
+A imagem fornecida é o frame de desafio do captcha.
+A pergunta do desafio é: "{pergunta}".
+
+O layout do desafio consiste em um grid de imagens estruturado da seguinte forma:
+- Se for um grid 3x3, as imagens são indexadas linha por linha da esquerda para a direita de 0 a 8:
+  0, 1, 2
+  3, 4, 5
+  6, 7, 8
+- Se for um grid 4x4, as imagens são indexadas linha por linha da esquerda para a direita de 0 a 15:
+  0, 1, 2, 3
+  4, 5, 6, 7
+  8, 9, 10, 11
+  12, 13, 14, 15
+
+Analise cuidadosamente as imagens do grid e a pergunta.
+Retorne um objeto JSON contendo estritamente a lista de índices de clique corretos (apenas as imagens que correspondem à pergunta).
+Não retorne blocos de código markdown, apenas o JSON bruto no seguinte formato:
+{{
+  "click_indices": [lista de inteiros com os índices das imagens que correspondem à pergunta]
+}}
+"""
+
+        payload = {
+            "model": "gpt-4o",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.0
+        }
+        
+        log(f"Enviando desafio de Captcha para a API GPT-4o Vision (Pergunta: '{pergunta}')...", "INFO")
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        if response.status_code == 200:
+            res_json = response.json()
+            content = res_json["choices"][0]["message"]["content"]
+            data = json.loads(content)
+            indices = data.get("click_indices", [])
+            log(f"GPT-4o Vision retornou os índices de clique: {indices}", "SUCCESS")
+            return indices
+        else:
+            log(f"Falha na API OpenAI Vision: {response.status_code} - {response.text}", "ERROR")
+            return None
+    except Exception as e:
+        log(f"Erro ao chamar OpenAI Vision: {e}", "ERROR")
+        return None
+
 # Aguardar resolução do CAPTCHA na tela
 def esperar_captcha(page, client_name, cnpj, step_name, config, destinatario=None):
     time.sleep(2.0)
     limite_tempo = 300  # 5 minutos no total
     inicio = time.time()
+    tentativas_ia = 0
     
     while time.time() - inicio < limite_tempo:
-        # Verificar se o CAPTCHA já foi resolvido com sucesso pelo usuário
+        # Verificar se o CAPTCHA já foi resolvido com sucesso
         # buscando os valores dos inputs de resposta (token)
         try:
             token_hcaptcha = page.evaluate("() => { const el = document.querySelector('[name=\"h-captcha-response\"]') || document.getElementById('h-captcha-response'); return el ? el.value : ''; }")
@@ -387,6 +464,11 @@ def esperar_captcha(page, client_name, cnpj, step_name, config, destinatario=Non
         if not has_hcaptcha and not has_recaptcha:
             log("Nenhum CAPTCHA detectado ou já resolvido.", "SUCCESS")
             return True
+            
+        # Limite de tentativas automáticas por IA (5 vezes) para evitar loops infinitos
+        if tentativas_ia >= 5:
+            log("Limite de 5 tentativas de resolução do CAPTCHA por IA atingido sem sucesso. Abortando varredura deste cliente.", "ERROR")
+            return False
             
         # 2. Identificar a frame de desafio (challenge) ativa
         challenge_frame = None
@@ -431,96 +513,79 @@ def esperar_captcha(page, client_name, cnpj, step_name, config, destinatario=Non
             except Exception:
                 pass
                 
-        # Se a frame de desafio está aberta, tiramos print e pedimos ajuda ao agente
+        # Se a frame de desafio está aberta, tiramos print e chamamos a IA
         if challenge_frame:
+            tentativas_ia += 1
             os.makedirs("temp", exist_ok=True)
             screenshot_path = os.path.join("temp", "captcha.png")
-            page.screenshot(path=screenshot_path)
-            print(f"[AGENTE_ACORDE_CAPTCHA] {client_name} | {cnpj}", flush=True)
-            log(f"[CAPTCHA] Desafio detectado. Print salvo em '{screenshot_path}'. Aguardando resolução do Agente...", "WARNING")
             
-            # Escreve o arquivo de requisição para o Agente
-            req_data = {
-                "status": "waiting",
-                "client_name": client_name,
-                "cnpj": cnpj,
-                "type": "hcaptcha" if is_hcaptcha else "recaptcha",
-                "screenshot_path": os.path.abspath(screenshot_path)
-            }
-            req_path = os.path.join("temp", "captcha_request.json")
-            with open(req_path, "w", encoding="utf-8") as f_req:
-                json.dump(req_data, f_req, indent=4, ensure_ascii=False)
-                
-            # Limpa resposta anterior se houver
-            resp_path = os.path.join("temp", "captcha_response.json")
-            if os.path.exists(resp_path):
-                try: os.remove(resp_path)
-                except: pass
-                
-            # Aguarda a resposta do Agente (limite de 2 minutos para cada tentativa)
-            log("[CAPTCHA] Aguardando arquivo 'temp/captcha_response.json' com os cliques...", "INFO")
-            enviar_whatsapp(f"🤖 *Alerta de CAPTCHA! (Mapeamento)*\n\nA automação tirou um print do CAPTCHA em 'temp/captcha.png'. Aguardando resolução do Agente.", config, destinatario)
-            
-            inicio_espera = time.time()
-            resolvido = False
-            while time.time() - inicio_espera < 120:
-                if os.path.exists(resp_path):
-                    try:
-                        with open(resp_path, "r", encoding="utf-8") as f_resp:
-                            resp_data = json.load(f_resp)
-                        click_indices = resp_data.get("click_indices", [])
-                        
-                        log(f"[CAPTCHA] Resposta recebida do Agente. Clicando nos índices: {click_indices}", "INFO")
-                        
-                        if is_hcaptcha:
-                            cells = challenge_frame.locator('.task-image, .image-wrapper, .image')
-                            verify_button = challenge_frame.locator('.button-submit, button:has-text("Verificar"), button:has-text("Verify"), button:has-text("Avançar"), button:has-text("Next")').first
-                        else:
-                            cells = challenge_frame.locator('.rc-imageselect-tile')
-                            verify_button = challenge_frame.locator('#recaptcha-verify-button').first
-                            
-                        # Clicar nos índices fornecidos com fallback JS
-                        for idx in click_indices:
-                            if 0 <= idx < cells.count():
-                                cell = cells.nth(idx)
-                                try:
-                                    cell.scroll_into_view_if_needed()
-                                    cell.click(force=True)
-                                except Exception:
-                                    try:
-                                        cell.evaluate("el => el.click()")
-                                    except Exception:
-                                        pass
-                                time.sleep(0.5)
-                                
-                        # Clicar no botão de verificar com scroll e fallback robusto
-                        if verify_button.is_visible():
-                            try:
-                                verify_button.scroll_into_view_if_needed()
-                                verify_button.click(force=True)
-                            except Exception:
-                                try:
-                                    verify_button.evaluate("el => el.click()")
-                                except Exception as e_ev:
-                                    log(f"Erro ao forçar clique via JS no botão de verificar: {e_ev}", "WARNING")
-                            
-                        time.sleep(3.0)
-                        resolvido = True
-                        break
-                    except Exception as e_resp:
-                        log(f"Erro ao processar resposta do captcha: {e_resp}", "WARNING")
-                        
-                time.sleep(1)
-                
-            # Limpa arquivos de comunicação da rodada
+            # Tentar tirar print focado no iframe do desafio para maior nitidez
             try:
-                if os.path.exists(req_path): os.remove(req_path)
-                if os.path.exists(resp_path): os.remove(resp_path)
+                challenge_frame.frame_element().screenshot(path=screenshot_path)
+            except Exception:
+                page.screenshot(path=screenshot_path)
+                
+            log(f"[CAPTCHA - IA] Desafio detectado (Tentativa {tentativas_ia}/5). Print salvo em '{screenshot_path}'. Extraindo pergunta...", "INFO")
+            
+            # Extrair pergunta
+            pergunta = ""
+            try:
+                if is_hcaptcha:
+                    pergunta = challenge_frame.locator('h2.prompt-text, .prompt-text, .challenge-prompt').first.inner_text()
+                else:
+                    pergunta = challenge_frame.locator('.rc-imageselect-instructions, .rc-imageselect-desc-wrapper, .rc-imageselect-desc-no-canonical').first.inner_text()
+                pergunta = pergunta.replace('\n', ' ').strip()
+            except Exception as e_p:
+                log(f"Aviso ao extrair pergunta do Captcha: {e_p}", "WARNING")
+                pergunta = "Identificar as imagens correspondentes ao objeto solicitado."
+                
+            # Chama a resolução da OpenAI GPT-4o Vision
+            click_indices = resolver_captcha_com_openai(screenshot_path, pergunta, is_hcaptcha, config)
+            
+            if click_indices is not None:
+                if is_hcaptcha:
+                    cells = challenge_frame.locator('.task-image, .image-wrapper, .image')
+                    verify_button = challenge_frame.locator('.button-submit, button:has-text("Verificar"), button:has-text("Verify"), button:has-text("Avançar"), button:has-text("Next")').first
+                else:
+                    cells = challenge_frame.locator('.rc-imageselect-tile')
+                    verify_button = challenge_frame.locator('#recaptcha-verify-button').first
+                    
+                # Clicar nos índices fornecidos com fallback JS
+                log(f"[CAPTCHA - IA] Clicando nos índices de imagem sugeridos: {click_indices}", "INFO")
+                for idx in click_indices:
+                    if 0 <= idx < cells.count():
+                        cell = cells.nth(idx)
+                        try:
+                            cell.scroll_into_view_if_needed()
+                            cell.click(force=True)
+                        except Exception:
+                            try:
+                                cell.evaluate("el => el.click()")
+                            except Exception:
+                                pass
+                        time.sleep(0.5)
+                        
+                # Clicar no botão de verificar com scroll e fallback robusto
+                if verify_button.is_visible():
+                    try:
+                        verify_button.scroll_into_view_if_needed()
+                        verify_button.click(force=True)
+                    except Exception:
+                        try:
+                            verify_button.evaluate("el => el.click()")
+                        except Exception as e_ev:
+                            log(f"Erro ao forçar clique via JS no botão de verificar: {e_ev}", "WARNING")
+                    
+                time.sleep(3.0)
+            else:
+                log("[CAPTCHA - IA] Falha ao obter cliques da IA. Aguardando 5 segundos antes da próxima tentativa...", "WARNING")
+                time.sleep(5.0)
+                
+            # Limpar arquivo de print
+            try:
+                if os.path.exists(screenshot_path): os.remove(screenshot_path)
             except: pass
             
-            if not resolvido:
-                log("Timeout aguardando resposta do Agente para esta tentativa de CAPTCHA.", "WARNING")
-                
         else:
             time.sleep(2.0)
             
