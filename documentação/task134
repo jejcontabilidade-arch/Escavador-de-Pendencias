@@ -1,0 +1,5 @@
+- `[x]` Criar função auxiliar para troca de representação no novo portal da situação fiscal.
+- `[x]` Refatorar a função `baixar_relatorio_situacao_fiscal` para isolar os downloads na página da situação fiscal.
+- `[x]` Modificar a lógica do loop principal em `main()` para abrir a aba da situação fiscal uma única vez e iterar os clientes diretamente nela.
+- `[x]` Tratar casos de login Gov.br intermediário de forma unificada e tratamento de erros do e-CAC/JAPE.
+- `[/]` Validar a compilação do arquivo `executar.py` e testar.

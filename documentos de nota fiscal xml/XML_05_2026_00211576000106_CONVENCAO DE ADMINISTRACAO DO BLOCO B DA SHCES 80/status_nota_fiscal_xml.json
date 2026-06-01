@@ -1,0 +1,9 @@
+{
+    "cnpj": "00211576000106",
+    "nome": "CONVENCAO DE ADMINISTRACAO DO BLOCO B DA SHCES 80",
+    "data_consulta": "2026-05-28",
+    "hora_consulta": "17:36:39",
+    "status": "Erro",
+    "detalhes": "Certificado digital expirado ou inválido no portal da NF-e",
+    "contador_falhas_hoje": 7
+}

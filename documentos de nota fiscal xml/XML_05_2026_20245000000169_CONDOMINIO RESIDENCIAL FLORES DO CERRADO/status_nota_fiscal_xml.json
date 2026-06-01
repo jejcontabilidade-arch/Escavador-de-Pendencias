@@ -1,0 +1,9 @@
+{
+    "cnpj": "20245000000169",
+    "nome": "CONDOMINIO RESIDENCIAL FLORES DO CERRADO",
+    "data_consulta": "2026-05-28",
+    "hora_consulta": "17:36:45",
+    "status": "Erro",
+    "detalhes": "Certificado digital expirado ou inválido no portal da NF-e",
+    "contador_falhas_hoje": 5
+}

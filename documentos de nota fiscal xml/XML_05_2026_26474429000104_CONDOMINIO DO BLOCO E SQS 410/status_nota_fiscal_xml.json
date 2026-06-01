@@ -1,0 +1,9 @@
+{
+    "cnpj": "26474429000104",
+    "nome": "CONDOMINIO DO BLOCO E SQS 410",
+    "data_consulta": "2026-05-28",
+    "hora_consulta": "17:51:06",
+    "status": "Erro",
+    "detalhes": "Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"input[name=\\\"ctl00$ContentPlaceHolder1$btnConsultarHCaptcha\\\"]\").first\n",
+    "contador_falhas_hoje": 1
+}

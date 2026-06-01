@@ -669,6 +669,59 @@ def remover_arquivos_fiscais_obsoletos(client_dir, arquivo_mantido_path=None):
     except Exception as e:
         log(f"Erro ao remover arquivos obsoletos: {e}", "WARNING")
 
+def arquivo_pertence_mes_atual(filepath):
+    if not os.path.exists(filepath):
+        return False
+    hoje = datetime.date.today()
+    current_year = hoje.year
+    current_month = hoje.month
+    
+    filename = os.path.basename(filepath)
+    
+    # 1. Tentar extrair data YYYYMMDD do nome do arquivo
+    import re
+    match = re.search(r"\d{8}", filename)
+    if match:
+        date_str = match.group(0)
+        try:
+            file_year = int(date_str[0:4])
+            file_month = int(date_str[4:6])
+            if file_year == current_year and file_month == current_month:
+                return True
+        except Exception:
+            pass
+            
+    # 2. Usar data de modificação
+    try:
+        stat = os.stat(filepath)
+        mtime = datetime.datetime.fromtimestamp(stat.st_mtime)
+        if mtime.year == current_year and mtime.month == current_month:
+            return True
+    except Exception:
+        pass
+        
+    return False
+
+def limpar_arquivos_meses_anteriores(client_dir):
+    """
+    Remove todos os arquivos da pasta do cliente que não pertencem ao mês atual.
+    Evita manter arquivos de competências anteriores.
+    """
+    if not os.path.exists(client_dir):
+        return
+    for item in os.listdir(client_dir):
+        item_path = os.path.join(client_dir, item)
+        if item.lower() == "status.json":
+            continue
+        if os.path.isdir(item_path):
+            continue
+        if not arquivo_pertence_mes_atual(item_path):
+            try:
+                os.remove(item_path)
+                log(f"Removido arquivo de competência anterior obsoleto: {item}", "INFO")
+            except Exception as e:
+                log(f"Erro ao remover arquivo obsoleto {item}: {e}", "WARNING")
+
 def gerar_consolidado_excel(clientes, relatorios_dir, output_path):
     log(f"Iniciando a geração do Painel Excel Consolidado: {output_path}", "INFO")
     try:
@@ -1208,6 +1261,137 @@ def alterar_perfil(page, cnpj, procurador_cnpj):
                 
         raise Exception("A alteração de perfil foi concluída, mas o CNPJ correspondente não foi identificado no cabeçalho.")
 
+def alterar_representacao_novo_portal(new_page, cnpj, procurador_cnpj):
+    cnpj_limpo = "".join(filter(str.isdigit, cnpj))
+    procurador_cnpj_limpo = "".join(filter(str.isdigit, procurador_cnpj)) if procurador_cnpj else ""
+    
+    log(f"[NOVO-PORTAL] Solicitando alteração de representação no novo portal para {cnpj}...", "ACTION")
+    
+    # 1. Localizar e clicar no trigger do avatar
+    avatar_trigger = new_page.locator("#avatar-dropdown-trigger, .br-sign-in").first
+    avatar_trigger.click()
+    new_page.wait_for_timeout(2000)
+    
+    # Caso A: Voltar para o procurador (Titular)
+    if procurador_cnpj_limpo and cnpj_limpo == procurador_cnpj_limpo:
+        log("[NOVO-PORTAL] Tentando voltar para o perfil Titular (Procurador)...", "ACTION")
+        # Procurar o botão C-> (sair da representação atual)
+        btn_sair_rep = None
+        for selector in [
+            "button:has-text('Sair da representação')", 
+            "button[title*='Sair']", 
+            "button[title*='representação']", 
+            "button[title*='Voltar']", 
+            ".br-item button", 
+            ".br-item a"
+        ]:
+            try:
+                loc = new_page.locator(selector).first
+                if loc.is_visible(timeout=1500):
+                    btn_sair_rep = loc
+                    break
+            except Exception:
+                continue
+                
+        if btn_sair_rep:
+            log("[NOVO-PORTAL] Clicando no botão para sair da representação...", "ACTION")
+            btn_sair_rep.click()
+            new_page.wait_for_timeout(4000)
+            
+            # Clicar no centro da página para garantir fechar qualquer painel lateral aberto
+            try:
+                new_page.click("body")
+            except Exception:
+                pass
+            return True
+        else:
+            log("[NOVO-PORTAL] Botão de sair da representação não encontrado. Tentando trocar digitando o CNPJ do procurador...", "WARNING")
+            
+    # Caso B: Trocar para um cliente (ou se o botão do Titular não foi encontrado)
+    # Escrever o CNPJ ou CPF do cliente no input
+    log(f"[NOVO-PORTAL] Preenchendo CNPJ de representação: {cnpj}...", "ACTION")
+    cnpj_input = new_page.locator("#input-representar-cpfcnpj, input[name='representar-cpfcnpj'], input[placeholder*='CPF ou CNPJ']").first
+    cnpj_input.clear()
+    cnpj_input.fill(cnpj)
+    new_page.wait_for_timeout(1000)
+    
+    # Clicar no dropdown de perfil de representação
+    log("[NOVO-PORTAL] Clicando no dropdown de perfil de representação...", "ACTION")
+    select_profile = new_page.locator("ng-select, .ng-select-container, .ng-placeholder").first
+    select_profile.click()
+    new_page.wait_for_timeout(500)
+    
+    # Selecionar o tipo de representação
+    perfil_opcao = "PROCURADOR"
+    if procurador_cnpj_limpo and cnpj_limpo == procurador_cnpj_limpo:
+        perfil_opcao = "RESPONSÁVEL"
+        
+    opcao = None
+    for term in [perfil_opcao, "Procurador", "PROCURADOR", "Responsável", "RESPONSAVEL", "TITULAR", "Titular"]:
+        try:
+            # Filtra apenas os elementos .ng-option dentro do painel suspenso aberto (.ng-dropdown-panel)
+            loc = new_page.locator(".ng-dropdown-panel .ng-option").filter(has_text=term).first
+            if loc.is_visible(timeout=1000):
+                opcao = loc
+                break
+        except Exception:
+            continue
+            
+    if not opcao:
+        try:
+            opcao = new_page.locator(".ng-dropdown-panel .ng-option").first
+            opcao.wait_for(state="visible", timeout=1000)
+        except Exception:
+            pass
+            
+    if opcao:
+        log(f"[NOVO-PORTAL] Selecionando opção no dropdown...", "ACTION")
+        opcao.click()
+        new_page.wait_for_timeout(500)
+    else:
+        log("[NOVO-PORTAL] Aviso: Nenhuma opção do dropdown selecionada.", "WARNING")
+        
+    # Clicar no botão Representar (solid blue / primary)
+    log("[NOVO-PORTAL] Clicando no botão Representar...", "ACTION")
+    btn_representar = None
+    for selector in [
+        "button.primary:has-text('Representar')",
+        "button.br-button.primary:has-text('Representar')",
+        ".br-button.primary:has-text('Representar')",
+        "button:has-text('Representar'):not([class*='trigger']):not([class*='header'])"
+    ]:
+        try:
+            loc = new_page.locator(selector).first
+            if loc.is_visible(timeout=1500):
+                btn_representar = loc
+                break
+        except Exception:
+            continue
+            
+    if not btn_representar:
+        # Fallback se não achar o botão primário específico, tenta o geral
+        btn_representar = new_page.locator("button:has-text('Representar'), .br-button:has-text('Representar')").first
+        
+    btn_representar.click()
+    
+    # Aguardar 4 segundos para a página recarregar a representação
+    new_page.wait_for_timeout(4000)
+    
+    # Validar se a alteração foi refletida no cabeçalho
+    header_text = avatar_trigger.inner_text()
+    header_cnpj_limpo = "".join(filter(str.isdigit, header_text))
+    if cnpj_limpo not in header_cnpj_limpo:
+        raise Exception(f"CNPJ ativo após a troca de representação ({header_cnpj_limpo}) não corresponde ao CNPJ esperado ({cnpj_limpo}).")
+        
+    # Clicar no centro da página para garantir fechar qualquer painel lateral aberto
+    try:
+        new_page.click("body")
+    except Exception:
+        pass
+    new_page.wait_for_timeout(1000)
+    log(f"[NOVO-PORTAL] Representação alterada com sucesso para o CNPJ: {cnpj}", "SUCCESS")
+    return True
+
 def baixar_certidao_regularidade_fiscal(page, context, client_dir, cnpj, config):
     log("Iniciando emissão da Certidão de Regularidade Fiscal no e-CAC...", "ACTION")
     
@@ -1334,19 +1518,18 @@ def baixar_certidao_regularidade_fiscal(page, context, client_dir, cnpj, config)
         remover_arquivos_fiscais_obsoletos(client_dir, cnd_path)
         return "Sem Pendências (Informativo Gravado)"
 
-def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja_possui_relatorio=False):
-    log("Navegando para o serviço de Consulta de Situação Fiscal...", "ACTION")
+def abrir_pagina_situacao_fiscal(page, context, config):
+    log("Navegando para o serviço de Consulta de Situação Fiscal no e-CAC...", "ACTION")
     
     # 1. Clicar na aba "Certidões e Situação Fiscal" no painel principal do e-CAC
     aba_clicada = False
     for selector in [
         "text=Certidões e Situação Fiscal",
-        "#btn198", # ID comum do botão de certidões no e-CAC
+        "#btn198",
         "//span[contains(text(), 'Certidões e Situação Fiscal')]",
         "//a[contains(text(), 'Certidões e Situação Fiscal')]"
     ]:
         try:
-            # Click direto utilizando o auto-waiting nativo do Playwright de até 4s
             page.click(selector, timeout=4000)
             aba_clicada = True
             break
@@ -1354,7 +1537,7 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
             continue
             
     if not aba_clicada:
-        raise Exception("Não foi possível acessar o menu 'Certidões e Situação Fiscal'.")
+        raise Exception("Não foi possível acessar o menu 'Certidões e Situação Fiscal' no painel principal.")
         
     page.wait_for_timeout(1000)
     
@@ -1369,10 +1552,7 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
         "//a[contains(text(), 'Consulta Pendências')]"
     ]:
         try:
-            # Esperar a abertura da nova aba ao clicar (definimos timeout de 10s)
-            with context.expect_page(timeout=10000) as new_page_info:
-                # Usamos dispatch_event('click') para simular o clique a nível de evento DOM
-                # Isso evita que o cursor físico dispare o hover do tooltip que cobre o link
+            with context.expect_page(timeout=12000) as new_page_info:
                 page.locator(selector).first.dispatch_event("click")
             new_page = new_page_info.value
             link_clicado = True
@@ -1380,103 +1560,42 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
         except Exception as click_err:
             log(f"Falha ao clicar com dispatch_event no seletor '{selector}': {click_err}. Tentando clique físico...", "WARNING")
             try:
-                with context.expect_page(timeout=10000) as new_page_info:
+                with context.expect_page(timeout=12000) as new_page_info:
                     page.locator(selector).first.click(timeout=4000)
                 new_page = new_page_info.value
                 link_clicado = True
                 break
             except Exception:
                 continue
-            
+                
     if not link_clicado or not new_page:
-        raise Exception("Não foi possível clicar em 'Consulta Pendências - Situação Fiscal' ou a nova aba não abriu.")
+        raise Exception("Não foi possível clicar em 'Consulta Pendências - Situação Fiscal' ou a aba do novo portal não abriu.")
         
-    log("Nova aba de Consulta de Situação Fiscal detectada.", "ACTION")
+    log("Aba do novo portal de Situação Fiscal aberta com sucesso.", "SUCCESS")
     new_page.wait_for_load_state("load")
     
-    # 2.5 Verificar se a nova página redirecionou para uma tela de login/autenticação intermediária (Gov.br)
-    # Isso costuma ocorrer quando mudamos de domínio de cav.receita.fazenda.gov.br para servicos.receitafederal.gov.br
+    # 2.5 Verificar se exige Gov.br login intermediário
     try:
         btn_gov = None
         for sel in ["text=Entrar com GovBR", "text=Entrar com o GovBR", "text=Entrar com o gov.br", "button:has-text('Entrar com')", "a:has-text('Entrar com')"]:
             try:
                 loc = new_page.locator(sel).first
-                if loc.is_visible(timeout=1000):
+                if loc.is_visible(timeout=1500):
                     btn_gov = loc
                     break
             except Exception:
                 continue
         if btn_gov:
-            log("Tela de autenticação intermediária do Gov.br detectada no novo domínio. Clicando em 'Entrar com GovBR'...", "WARNING")
+            log("Tela de autenticação intermediária do Gov.br detectada. Clicando em 'Entrar com GovBR'...", "WARNING")
             btn_gov.click()
-            # Aguarda a nova página carregar após o redirecionamento de login
             new_page.wait_for_load_state("load")
             new_page.wait_for_timeout(3000)
     except Exception as e:
         log(f"Sem tela de login intermediária do Gov.br ou falha ao clicar: {e}. Prosseguindo...", "INFO")
         
-    # 2.7 Trocar Representação diretamente no Novo Portal (se necessário)
-    try:
-        avatar_trigger = new_page.locator("#avatar-dropdown-trigger, .br-sign-in").first
-        if avatar_trigger.is_visible(timeout=4000):
-            header_text = avatar_trigger.inner_text()
-            cnpj_limpo = "".join(filter(str.isdigit, cnpj))
-            header_cnpj_limpo = "".join(filter(str.isdigit, header_text))
-            
-            # Se o CNPJ ativo no cabeçalho do novo portal for diferente do CNPJ procurado, fazemos a troca
-            if cnpj_limpo not in header_cnpj_limpo:
-                log(f"[NOVO-PORTAL] CNPJ ativo no novo portal é diferente do alvo ({cnpj}). Iniciando troca...", "INFO")
-                
-                # Clicar com time de 2 segundos no trigger do avatar
-                avatar_trigger.click()
-                new_page.wait_for_timeout(2000)
-                
-                # Escrever o CNPJ ou CPF do cliente no input
-                log(f"[NOVO-PORTAL] Preenchendo CNPJ de representação: {cnpj}...", "ACTION")
-                cnpj_input = new_page.locator("#input-representar-cpfcnpj, input[name='representar-cpfcnpj']").first
-                cnpj_input.clear()
-                cnpj_input.fill(cnpj)
-                
-                # Aguardar 1 segundo
-                new_page.wait_for_timeout(1000)
-                
-                # Clicar no dropdown de perfil de representação
-                log("[NOVO-PORTAL] Clicando no dropdown de perfil de representação...", "ACTION")
-                select_profile = new_page.locator("ng-select, .ng-select-container, .ng-placeholder").first
-                select_profile.click()
-                new_page.wait_for_timeout(500)
-                
-                # Selecionar "PROCURADOR"
-                opcao_procurador = new_page.locator(".ng-option:has-text('PROCURADOR'), .ng-option:has-text('Procurador'), text='PROCURADOR'").first
-                opcao_procurador.click()
-                new_page.wait_for_timeout(500)
-                
-                # Clicar no botão Representar
-                log("[NOVO-PORTAL] Clicando no botão Representar...", "ACTION")
-                btn_representar = new_page.locator("button:has-text('Representar'), .btn:has-text('Representar'), [role='button']:has-text('Representar')").first
-                btn_representar.click()
-                
-                # Aguardar 4 segundos para a página recarregar a representação
-                new_page.wait_for_timeout(4000)
-                
-                # Validar se a alteração foi refletida no cabeçalho
-                header_text_after = avatar_trigger.inner_text()
-                header_cnpj_after = "".join(filter(str.isdigit, header_text_after))
-                if cnpj_limpo not in header_cnpj_after:
-                    raise Exception(f"CNPJ ativo após a troca de representação ({header_cnpj_after}) não corresponde ao CNPJ esperado ({cnpj_limpo}).")
-                
-                # Clicar no centro da página (body) para conferir/remover dropdown e prosseguir
-                new_page.click("body")
-                new_page.wait_for_timeout(1000)
-                log(f"[NOVO-PORTAL] Representação alterada com sucesso para o CNPJ: {cnpj}", "SUCCESS")
-            else:
-                log(f"[NOVO-PORTAL] Representação ativa no novo portal já corresponde ao CNPJ {cnpj}.", "SUCCESS")
-    except Exception as rep_err:
-        log(f"[NOVO-PORTAL] Erro crítico ao gerenciar representação diretamente no novo portal: {rep_err}", "ERROR")
-        raise Exception(f"Não foi possível estabelecer a representação no novo portal para o CNPJ {cnpj}: {rep_err}")
+    return new_page
 
-    # 3. Aguardar o carregamento dos dados da situação fiscal
-    # Esta página costuma fazer consultas lentas em APIs internas. Vamos aguardar pacientemente.
+def baixar_documento_situacao_fiscal(new_page, main_page, context, client_dir, cnpj, config, ja_possui_relatorio=False):
     log("Aguardando carregamento da situação fiscal do cliente na Receita Federal (isso pode levar alguns segundos)...", "ACTION")
     
     # Espera até 40 segundos no total com polling ativo para avançar IMEDIATAMENTE quando a página carregar
@@ -1496,7 +1615,7 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
         try:
             page_text = new_page.locator("body").inner_text()
             if "Não foi possível concluir a ação para o contribuinte" in page_text or "107.6 -" in page_text:
-                log("[JAPE] Erro temporário do e-CAC (107.6) detectado para este contribuinte. Capturando screenshot e pulando...", "WARNING")
+                log("[JAPE] Erro temporário do e-CAC (107.6) detectado para este contribuinte. Capturando screenshot...", "WARNING")
                 
                 # Capturar screenshot do erro na pasta do cliente
                 screenshot_path = os.path.join(client_dir, "erro_jape.png")
@@ -1506,12 +1625,6 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
                     remover_arquivos_fiscais_obsoletos(client_dir, screenshot_path)
                 except Exception as snap_err:
                     log(f"Não foi possível capturar screenshot do erro JAPE: {snap_err}", "WARNING")
-                
-                # Fechar aba do relatório
-                try:
-                    new_page.close()
-                except Exception:
-                    pass
                 
                 raise JapeException("Não foi possível concluir a ação para o contribuinte (Erro 107.6 / JAPE)")
         except JapeException:
@@ -1535,7 +1648,7 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
     else:
         log("Aviso: Tempo limite de carregamento de 40 segundos atingido. Verificando elementos presentes na página...", "WARNING")
         
-    # 4. Analisar se o cliente tem pendências ou se está regular
+    # Analisar se o cliente tem pendências ou se está regular
     page_text = new_page.locator("body").inner_text()
     
     # Se houver a mensagem amarela exigindo atualização da consulta, clicar em "Atualizar"
@@ -1614,22 +1727,19 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
                 download.save_as(pdf_path)
                 log(f"Certidão de regularidade fiscal baixada com sucesso: {pdf_path}", "SUCCESS")
                 remover_arquivos_fiscais_obsoletos(client_dir, pdf_path)
-                new_page.close()
                 return "Certidão Baixada"
             except Exception as e:
                 log(f"Falha ao clicar no botão 'Baixar Certidão': {e}. Tentando fallback...", "WARNING")
                 
-        # Se não localizou o botão ou falhou o download na página de pendências, tenta emitir pela aba tradicional do e-CAC
+        # Fallback via menu tradicional do e-CAC
         log("Tentando emitir CND via menu tradicional do e-CAC como fallback...", "INFO")
-        new_page.close()
-        resultado_fallback = baixar_certidao_regularidade_fiscal(page, context, client_dir, cnpj, config)
+        resultado_fallback = baixar_certidao_regularidade_fiscal(main_page, context, client_dir, cnpj, config)
         return resultado_fallback
         
     else:
-        # COM PENDÊNCIAS - Baixar o Relatório PDF ou ignorar se já existe no mês
+        # COM PENDÊNCIAS
         if ja_possui_relatorio:
-            log("A situação fiscal continua com pendências e o relatório do mês corrente já existe na pasta. Ignorando novo download redundante.", "INFO")
-            new_page.close()
+            log("A situação fiscal continua com pendências e o relatório do mês corrente já existe na pasta. Ignorando novo download.", "INFO")
             return "Relatório Existente (Pendências mantidas)"
             
         log("Pendências fiscais ativas detectadas. Buscando botão de download do RELATÓRIO...", "ACTION")
@@ -1670,10 +1780,8 @@ def baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja
             download.save_as(pdf_path)
             log(f"Relatório fiscal baixado e salvo com sucesso: {pdf_path}", "SUCCESS")
             remover_arquivos_fiscais_obsoletos(client_dir, pdf_path)
-            new_page.close()
             return "Relatório Baixado"
         except Exception as e:
-            new_page.close()
             raise Exception(f"Falha ao realizar download do PDF do Relatório: {e}")
 
 def realizar_login_manual(config):
@@ -2047,6 +2155,8 @@ def main():
                 need_restart = True
             
             if not need_restart:
+                situacao_fiscal_page = None
+                
                 # 2. Iterar sobre a lista de clientes
                 for cliente in clientes:
                     cnpj = cliente["cnpj"]
@@ -2063,6 +2173,10 @@ def main():
                     nome_limpo = clean_filename(nome)
                     cnpj_limpo = "".join(filter(str.isdigit, cnpj))
                     client_dir = os.path.join(config["relatorios_dir"], f"{cnpj_limpo}_{nome_limpo}")
+                    
+                    # Limpar preventivamente arquivos de competências anteriores (meses anteriores)
+                    limpar_arquivos_meses_anteriores(client_dir)
+                    
                     status_path = os.path.join(client_dir, "status.json")
                     
                     # Salva cópia do status antigo caso precise restaurar
@@ -2076,21 +2190,15 @@ def main():
                             
                     forcar_todos = "--forcar-todos" in sys.argv
                     
-                    # 1. Verificar se já existem arquivos de regularidade (Certidão ou Informativo Regular) na pasta do cliente
-                    cnd_pdfs = glob.glob(os.path.join(client_dir, "CertidaoRegularidadeFiscal-*.pdf"))
-                    cnd_txts = glob.glob(os.path.join(client_dir, "Sem_Pendencias_Fiscais_Regular-*.txt"))
-                    relatorio_pdfs = glob.glob(os.path.join(client_dir, "RelatorioSituacaoFiscal-*.pdf"))
+                    # Verificar arquivos de regularidade pertencentes ao mês atual
+                    cnd_pdfs = [f for f in glob.glob(os.path.join(client_dir, "CertidaoRegularidadeFiscal-*.pdf")) if arquivo_pertence_mes_atual(f)]
+                    cnd_txts = [f for f in glob.glob(os.path.join(client_dir, "Sem_Pendencias_Fiscais_Regular-*.txt")) if arquivo_pertence_mes_atual(f)]
+                    relatorio_pdfs = [f for f in glob.glob(os.path.join(client_dir, "RelatorioSituacaoFiscal-*.pdf")) if arquivo_pertence_mes_atual(f)]
                     
                     possui_registro_existente = len(cnd_pdfs) > 0 or len(cnd_txts) > 0 or len(relatorio_pdfs) > 0
                     
-                    if not forcar_todos and (cnd_pdfs or cnd_txts):
-                        log(f"Cliente {nome} ({cnpj}) já possui Certidão/Regularidade ativa na pasta do cliente. Pulando consulta no e-CAC.", "SUCCESS")
-                        detalhes_status = "Certidão Baixada" if cnd_pdfs else "Sem Pendências (Informativo Gravado)"
-                        save_client_status(config["relatorios_dir"], cnpj, nome, "Sucesso", detalhes_status)
-                        success_count += 1
-                        # Atualiza a planilha de forma dinâmica
-                        atualizar_excel_dinamico(clientes, config)
-                        continue
+                    # Bypass local de CND removido: sempre consultamos dentro do e-CAC.
+                    # Apenas pulamos se já consultado hoje com sucesso.
                         
                     # 2. Verificar se o cliente já foi consultado com SUCESSO hoje de fato
                     ja_processado_hoje = False
@@ -2129,8 +2237,7 @@ def main():
                         atualizar_excel_dinamico(clientes, config)
                         continue
                         
-                    # 3. Verificar se já existe relatório de pendência na pasta do cliente
-                    relatorio_pdfs = glob.glob(os.path.join(client_dir, "RelatorioSituacaoFiscal-*.pdf"))
+                    # 3. Verificar se já existe relatório de pendência pertencente ao mês atual na pasta do cliente
                     tem_relatorio_existente = len(relatorio_pdfs) > 0
                     
                     log(f"Processando Cliente: {nome} ({cnpj})...", "INFO")
@@ -2156,37 +2263,57 @@ def main():
                             if tentativa > 1 or context is None or page is None or need_browser_restart:
                                 need_browser_restart = True # Força o atraso de 1 minuto em iniciar_navegador
                                 iniciar_navegador()
+                                situacao_fiscal_page = None
                                 
-                            # 0.5. Limpar modais iniciais ou remanescentes e tratar Caixa Postal bloqueante
+                            # 0.5. Limpar modais iniciais ou remanescentes no painel principal
                             fechar_modais_e_overlays(page)
-                            checar_e_tratar_caixa_postal(page, client_dir, config)
                             
-                            # 1. Verificar qual é o perfil atualmente ativo na tela do e-CAC
-                            header_text = page.locator("body").inner_text()
+                            # 1. Garantir que a página de situação fiscal está aberta
+                            if not situacao_fiscal_page or situacao_fiscal_page.is_closed():
+                                situacao_fiscal_page = abrir_pagina_situacao_fiscal(page, context, config)
+                                
+                            # Limpar overlays da página da situação fiscal
+                            fechar_modais_e_overlays(situacao_fiscal_page)
+                            checar_e_tratar_caixa_postal(situacao_fiscal_page, client_dir, config)
+                            
+                            # 1.5. Aguardar o carregamento de sucesso (avatar) ou de erro temporário (JAPE 107.6)
+                            log("Aguardando carregamento da tela de Situação Fiscal (sucesso ou erro JAPE)...", "ACTION")
+                            detector = situacao_fiscal_page.locator(
+                                "#avatar-dropdown-trigger, .br-sign-in, :has-text('Não foi possível concluir a ação'), :has-text('107.6 -'), button:has-text('Atualizar')"
+                            ).first
+                            try:
+                                detector.wait_for(state="visible", timeout=15000)
+                            except Exception as wait_err:
+                                log(f"Aviso: Timeout ao aguardar carregamento da tela de Situação Fiscal: {wait_err}", "WARNING")
+                                
+                            # Verificar se ocorreu erro temporário JAPE (107.6) na tela
+                            try:
+                                page_text = situacao_fiscal_page.locator("body").inner_text()
+                                if "Não foi possível concluir a ação para o contribuinte" in page_text or "107.6 -" in page_text:
+                                    log("[JAPE] Erro temporário do e-CAC (107.6) detectado no carregamento da tela.", "WARNING")
+                                    raise JapeException("Não foi possível concluir a ação para o contribuinte (Erro 107.6 / JAPE) no carregamento")
+                            except JapeException:
+                                raise
+                            except Exception:
+                                pass
+                                
+                            # 2. Obter o trigger do avatar e garantir que está visível para prosseguir
+                            avatar_trigger = situacao_fiscal_page.locator("#avatar-dropdown-trigger, .br-sign-in").first
+                            avatar_trigger.wait_for(state="visible", timeout=5000)
+                            header_text = avatar_trigger.inner_text()
                             header_text_limpo = header_text.replace(".", "").replace("/", "").replace("-", "").replace(" ", "").replace("\n", "").replace("\r", "")
                             
                             cnpj_sem_formatacao = cnpj.replace(".", "").replace("/", "").replace("-", "")
                             
-                            # Caso A: O cliente que queremos consultar é o próprio procurador (JEJ)
-                            if procurador_cnpj and cnpj == procurador_cnpj:
-                                if "Procuradorde" in header_text_limpo:
-                                    log(f"Perfil atual não é Titular. Solicitando alteração de perfil para voltar ao Titular ({nome})...", "INFO")
-                                    alterar_perfil(page, cnpj, procurador_cnpj)
-                                    checar_e_tratar_caixa_postal(page, client_dir, config)
-                                else:
-                                    log(f"Já estamos no perfil Titular do procurador ({nome}). Consultando diretamente.", "INFO")
-                                    
-                            # Caso B: O cliente que queremos consultar é uma empresa representada (Tome & Lopes)
+                            if cnpj_sem_formatacao not in header_text_limpo:
+                                log(f"Perfil ativo no novo portal diferente de {nome}. Efetuando a troca diretamente...", "INFO")
+                                alterar_representacao_novo_portal(situacao_fiscal_page, cnpj, procurador_cnpj)
+                                checar_e_tratar_caixa_postal(situacao_fiscal_page, client_dir, config)
                             else:
-                                if cnpj_sem_formatacao in header_text_limpo:
-                                    log(f"O perfil ativo no e-CAC já corresponde a {nome} ({cnpj}). Pulando alteração de perfil.", "SUCCESS")
-                                else:
-                                    log(f"Perfil atual diferente de {nome}. Alterando perfil para o CNPJ: {cnpj}...", "INFO")
-                                    alterar_perfil(page, cnpj, procurador_cnpj)
-                                    checar_e_tratar_caixa_postal(page, client_dir, config)
+                                log(f"O perfil ativo no novo portal já corresponde a {nome} ({cnpj}). Pulando troca.", "SUCCESS")
                                 
-                            # Acessar Situação Fiscal e baixar relatório
-                            resultado = baixar_relatorio_situacao_fiscal(page, context, client_dir, cnpj, config, ja_possui_relatorio=tem_relatorio_existente)
+                            # Acessar Situação Fiscal e baixar documento
+                            resultado = baixar_documento_situacao_fiscal(situacao_fiscal_page, page, context, client_dir, cnpj, config, ja_possui_relatorio=tem_relatorio_existente)
                             
                             # Salvar metadados de sucesso
                             save_client_status(config["relatorios_dir"], cnpj, nome, "Sucesso", resultado)
@@ -2197,30 +2324,32 @@ def main():
                         except JapeException as e:
                             log(f"[ERRO JAPE] Erro temporário e-CAC (107.6) para {nome} ({cnpj}): {e}", "WARNING")
                             erro_final = e
-                            if page:
+                            if situacao_fiscal_page:
                                 try:
-                                    url_erro = page.url
+                                    url_erro = situacao_fiscal_page.url
                                 except Exception:
                                     pass
                             
                             # Fechar abas extras se acumularam
                             try:
-                                if context and len(context.pages) > 1:
-                                    for p_extra in context.pages[1:]:
+                                if context and len(context.pages) > 2:
+                                    for p_extra in context.pages[2:]:
                                         p_extra.close()
                             except Exception:
                                 pass
                                 
-                            # Redirecionar página principal de volta para a Home do e-CAC
+                            # Redirecionar a página de situação fiscal de volta para a URL base dela
                             try:
-                                log("Redirecionando a página principal de volta para a Home do e-CAC...", "INFO")
-                                page.goto(config["portal_url"], timeout=20000)
-                                page.wait_for_load_state("load")
-                                # Esperar até que o botão "Alterar perfil de acesso" esteja visível
-                                page.locator("text=Alterar perfil de acesso").first.wait_for(state="visible", timeout=10000)
-                                log("Página principal retornada com sucesso para a Home do e-CAC (botão Alterar perfil visível).", "SUCCESS")
+                                log("Redirecionando a página de situação fiscal de volta para a sua URL base...", "INFO")
+                                situacao_fiscal_page.goto("https://servicos.receitafederal.gov.br/servico/pendencias/#/analise-pendencias", timeout=20000)
+                                situacao_fiscal_page.wait_for_load_state("load")
                             except Exception as nav_err:
-                                log(f"Aviso: Falha ao redirecionar para a Home após erro JAPE: {nav_err}. A automação tentará prosseguir.", "WARNING")
+                                log(f"Aviso: Falha ao redirecionar após erro JAPE: {nav_err}. A aba será fechada e reaberta.", "WARNING")
+                                try:
+                                    situacao_fiscal_page.close()
+                                except Exception:
+                                    pass
+                                situacao_fiscal_page = None
 
                             sucesso_cliente = False
                             break
@@ -2228,26 +2357,26 @@ def main():
                         except Exception as e:
                             log(f"[ERRO - TENTATIVA {tentativa}/{max_tentativas}] Erro ao processar cliente {nome} ({cnpj}): {e}", "WARNING")
                             erro_final = e
-                            if page:
+                            target_page_for_err = situacao_fiscal_page or page
+                            if target_page_for_err:
                                 try:
-                                    url_erro = page.url
+                                    url_erro = target_page_for_err.url
                                 except Exception:
                                     pass
                             
-                            # Enriquecer o erro com textos visíveis na tela (mensagens de erro do e-CAC/Gov.br)
+                            # Enriquecer o erro com textos visíveis na tela
                             msg_tela = ""
-                            if page:
+                            if target_page_for_err:
                                 try:
-                                    body_text = page.locator("body").inner_text()
+                                    body_text = target_page_for_err.locator("body").inner_text()
                                     linhas_erro = []
                                     for line in body_text.split("\n"):
                                         line_s = line.strip()
                                         line_l = line_s.lower()
                                         if not line_s or len(line_s) < 5:
                                             continue
-                                        # Captura avisos, mensagens de erro do gov.br ou do e-cac
                                         if any(x in line_l for x in ["atenção", "atencao", "erro", "restrição", "restricao", "inexistente", "cancelada", "expirada", "automatizado", "indisponível", "falha", "não cadastrada", "revogada"]):
-                                            if len(line_s) < 250: # Evita blocos excessivamente longos
+                                            if len(line_s) < 250:
                                                 linhas_erro.append(line_s)
                                     
                                     if linhas_erro:
@@ -2256,19 +2385,20 @@ def main():
                                 except Exception:
                                     pass
                             
-                            # Capturar screenshot do erro para diagnóstico visual na pasta do cliente
-                            try:
-                                screenshot_path = os.path.join(client_dir, f"erro_tentativa_{tentativa}.png")
-                                page.screenshot(path=screenshot_path)
-                                log(f"Screenshot do erro capturado e salvo em: {screenshot_path}", "INFO")
-                                remover_arquivos_fiscais_obsoletos(client_dir, screenshot_path)
-                            except Exception as snap_err:
-                                log(f"Não foi possível capturar screenshot do erro: {snap_err}", "WARNING")
+                            # Capturar screenshot do erro
+                            if target_page_for_err:
+                                try:
+                                    screenshot_path = os.path.join(client_dir, f"erro_tentativa_{tentativa}.png")
+                                    target_page_for_err.screenshot(path=screenshot_path)
+                                    log(f"Screenshot do erro capturado e salvo em: {screenshot_path}", "INFO")
+                                    remover_arquivos_fiscais_obsoletos(client_dir, screenshot_path)
+                                except Exception as snap_err:
+                                    log(f"Não foi possível capturar screenshot do erro: {snap_err}", "WARNING")
                                 
                             # Fechar abas extras se acumularam
                             try:
-                                if context and len(context.pages) > 1:
-                                    for p_extra in context.pages[1:]:
+                                if context and len(context.pages) > 2:
+                                    for p_extra in context.pages[2:]:
                                         p_extra.close()
                             except Exception:
                                 pass
@@ -2284,20 +2414,14 @@ def main():
                                     except Exception as rm_err:
                                         log(f"Não foi possível remover state.json: {rm_err}", "WARNING")
                                 
-                            # Se der erro em algum processo, fechar o e-CAC (sair) para entrar novamente do início na próxima tentativa/cliente
-                            log("Realizando logout e fechando navegador do e-CAC devido a erro de execução...", "INFO")
-                            need_browser_restart = True
-                            if context:
+                            # Se der erro em algum processo, fechar a aba de situação fiscal e reabrir na próxima tentativa/cliente
+                            log("Fechando a aba da situação fiscal e marcando reinicialização devido a erro...", "INFO")
+                            if situacao_fiscal_page:
                                 try:
-                                    tentar_logout_ecac(page)
+                                    situacao_fiscal_page.close()
                                 except Exception:
                                     pass
-                                try:
-                                    context.close()
-                                except Exception:
-                                    pass
-                                context = None
-                                page = None
+                                situacao_fiscal_page = None
                                 
                             # Verificar se é um erro permanente de procuração
                             erro_str = str(e).lower()

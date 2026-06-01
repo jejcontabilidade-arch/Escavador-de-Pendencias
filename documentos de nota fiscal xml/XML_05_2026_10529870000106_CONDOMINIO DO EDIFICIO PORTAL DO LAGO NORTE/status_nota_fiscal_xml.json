@@ -1,0 +1,9 @@
+{
+    "cnpj": "10529870000106",
+    "nome": "CONDOMINIO DO EDIFICIO PORTAL DO LAGO NORTE",
+    "data_consulta": "2026-05-28",
+    "hora_consulta": "17:58:19",
+    "status": "Erro",
+    "detalhes": "Chaves encontradas, mas nenhuma baixada",
+    "contador_falhas_hoje": 1
+}

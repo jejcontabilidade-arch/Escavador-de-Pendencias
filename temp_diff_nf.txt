@@ -1,0 +1,242 @@
+diff --git a/consultar_nota_fiscal_xml.py b/consultar_nota_fiscal_xml.py
+index de1b83d..3ecd9af 100644
+--- a/consultar_nota_fiscal_xml.py
++++ b/consultar_nota_fiscal_xml.py
+@@ -344,17 +344,27 @@ def esperar_captcha(page, client_name, cnpj, step_name, config, destinatario=Non
+         # Procura hCaptcha challenge
+         for f in page.frames:
+             if "frame=challenge" in f.url:
+-                challenge_frame = f
+-                is_hcaptcha = True
+-                break
++                try:
++                    iframe_el = page.locator('iframe[src*="frame=challenge"]').first
++                    if iframe_el.count() > 0 and iframe_el.is_visible():
++                        challenge_frame = f
++                        is_hcaptcha = True
++                        break
++                except Exception:
++                    pass
+         
+         # Procura reCAPTCHA challenge
+         if not challenge_frame:
+             for f in page.frames:
+                 if "bframe" in f.url or "recaptcha/api2/bframe" in f.url:
+-                    challenge_frame = f
+-                    is_recaptcha = True
+-                    break
++                    try:
++                        iframe_el = page.locator('iframe[src*="bframe"], iframe[src*="recaptcha/api2/bframe"]').first
++                        if iframe_el.count() > 0 and iframe_el.is_visible():
++                            challenge_frame = f
++                            is_recaptcha = True
++                            break
++                    except Exception:
++                        pass
+                     
+         # Se a frame de desafio não está visível ainda (apenas o checkbox),
+         # tenta clicar no checkbox para abrir o desafio
+@@ -417,15 +427,30 @@ def esperar_captcha(page, client_name, cnpj, step_name, config, destinatario=Non
+                             cells = challenge_frame.locator('.rc-imageselect-tile')
+                             verify_button = challenge_frame.locator('#recaptcha-verify-button').first
+                             
+-                        # Clicar nos índices fornecidos
++                        # Clicar nos índices fornecidos com fallback JS
+                         for idx in click_indices:
+                             if 0 <= idx < cells.count():
+-                                cells.nth(idx).click(force=True)
++                                cell = cells.nth(idx)
++                                try:
++                                    cell.scroll_into_view_if_needed()
++                                    cell.click(force=True)
++                                except Exception:
++                                    try:
++                                        cell.evaluate("el => el.click()")
++                                    except Exception:
++                                        pass
+                                 time.sleep(0.5)
+                                 
+-                        # Clicar no botão de verificar
++                        # Clicar no botão de verificar com scroll e fallback robusto
+                         if verify_button.is_visible():
+-                            verify_button.click(force=True)
++                            try:
++                                verify_button.scroll_into_view_if_needed()
++                                verify_button.click(force=True)
++                            except Exception:
++                                try:
++                                    verify_button.evaluate("el => el.click()")
++                                except Exception as e_ev:
++                                    log(f"Erro ao forçar clique via JS no botão de verificar: {e_ev}", "WARNING")
+                             
+                         time.sleep(3.0)
+                         resolvido = True
+@@ -814,6 +839,25 @@ def extrair_dados_fiscais_nfe(caminho_json):
+         
+     return dados_fiscais
+ 
++def limpar_cache_perfil_chrome(user_data_dir, cnpj=None):
++    import subprocess
++    import time
++    try:
++        filter_str = f"*chrome_profile_{cnpj}*" if cnpj else "*chrome_profile_nota_fiscal_xml*"
++        cmd = f'powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\"Name = \'chrome.exe\' or Name = \'chromedriver.exe\'\\" | Where-Object {{ $_.CommandLine -like \'{filter_str}\' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"'
++        subprocess.run(cmd, shell=True, capture_output=True, timeout=5)
++    except Exception:
++        pass
++        
++    if os.path.exists(user_data_dir):
++        for _ in range(3):
++            try:
++                shutil.rmtree(user_data_dir)
++                log(f"[CACHE] Limpeza completa realizada para o perfil: '{os.path.basename(user_data_dir)}'", "SUCCESS")
++                break
++            except Exception:
++                time.sleep(0.5)
++
+ # Helpers adicionais para classificação mensal e modernização do certificado
+ def extrair_mes_ano_emissao(xml_path):
+     import xml.etree.ElementTree as ET
+@@ -1138,18 +1182,36 @@ def executar_varredura_nfe_para_cliente(page, config, cnpj_cliente, nome_cliente
+         log("Navegando para 'Manifestação Destinatário'...", "INFO")
+         link_selector = 'a[href*="manifestacao"]:visible, a:has-text("Manifestação Destinatário"):visible, a:has-text("Manifestacao Destinatario"):visible'
+         page.locator(link_selector).first.click()
+-        page.wait_for_load_state("networkidle")
+         
+         try:
+-            rbt_sem_chave = page.locator('input#ctl00_ContentPlaceHolder1_rbtSemChave, input[value="rbtSemChave"]').first
+-            if rbt_sem_chave.is_visible(timeout=5000):
+-                log("Clicando diretamente no radio button 'Não tenho a Chave de Acesso'...", "INFO")
+-                rbt_sem_chave.click()
+-            else:
+-                opcao_nao_tenho = page.locator('label:has-text("Não tenho a Chave de Acesso"), label:has-text("Nao tenho a Chave"), text="Não tenho a Chave de Acesso"').first
+-                opcao_nao_tenho.wait_for(state="visible", timeout=5000)
+-                log("Selecionando opção 'Não tenho a Chave de Acesso' via label...", "INFO")
+-                opcao_nao_tenho.click()
++            page.wait_for_load_state("networkidle", timeout=10000)
++        except Exception:
++            pass
++            
++        # Verifica se o portal reportou erro de certificado digital expirado ou inválido
++        conteudo_visivel_init = ""
++        try:
++            conteudo_visivel_init = page.locator("body").inner_text()
++        except Exception:
++            pass
++            
++        if "certificado digital" in conteudo_visivel_init.lower() and ("expirado" in conteudo_visivel_init.lower() or "inválido" in conteudo_visivel_init.lower() or "invalido" in conteudo_visivel_init.lower()):
++            raise Exception("Certificado digital expirado ou inválido no portal da NF-e")
++            
++        try:
++            # Procura de forma robusta pelo radio button ou label correspondente usando seletores válidos
++            opcao_nao_tenho = page.locator(
++                'input#ctl00_ContentPlaceHolder1_rbtSemChave, '
++                'input[value="rbtSemChave"], '
++                'label[for*="rbtSemChave"], '
++                'label:has-text("Não tenho a Chave de Acesso"), '
++                'label:has-text("Nao tenho a Chave"), '
++                'label:has-text("Não tenho a Chave")'
++            ).first
++            
++            opcao_nao_tenho.wait_for(state="visible", timeout=15000)
++            log("Selecionando opção 'Não tenho a Chave de Acesso'...", "INFO")
++            opcao_nao_tenho.click()
+             time.sleep(1.5)
+         except Exception as e_opt:
+             log(f"Aviso ao selecionar opção 'Não tenho a Chave': {e_opt}", "WARNING")
+@@ -1203,18 +1265,58 @@ def executar_varredura_nfe_para_cliente(page, config, cnpj_cliente, nome_cliente
+         log("Clicando em Pesquisar...", "INFO")
+         btn_pesquisar_selector = 'input[value="Pesquisar"], input[name*="Pesquisar"], input[name*="btnPesquisar"], button:has-text("Pesquisar"), input[name*="btnConsultar"]'
+         page.locator(btn_pesquisar_selector).first.click()
+-        page.wait_for_load_state("networkidle")
+         
+-        time.sleep(2.5)
+-        conteudo_html = page.content()
+-        conteudo_visivel = page.locator("body").inner_text()
++        # Espera o carregamento inicial da página após o clique
++        try:
++            page.wait_for_load_state("domcontentloaded", timeout=10000)
++        except Exception:
++            pass
++            
++        # Loop para aguardar dinamicamente que o resultado da pesquisa seja renderizado na tela
++        # (seja uma chave de acesso, a mensagem de 'sem registros' ou alguma mensagem de erro do portal)
++        limite_busca = 15
++        inicio_busca = time.time()
++        chaves = []
++        conteudo_visivel = ""
++        conteudo_html = ""
+         
+-        if "Não existe registro para os dados informados" in conteudo_visivel:
++        log("Aguardando os resultados da pesquisa serem carregados na tela...", "INFO")
++        while time.time() - inicio_busca < limite_busca:
++            conteudo_html = page.content()
++            conteudo_visivel = page.locator("body").inner_text()
++            
++            # 1. Procurar chaves de 44 dígitos
++            chaves = list(dict.fromkeys(re.findall(r'(?<!\d)\d{44}(?!\d)', conteudo_html)))
++            
++            # 2. Verificar se há mensagens conhecidas
++            if chaves:
++                break
++            if "Não existe registro para os dados informados" in conteudo_visivel:
++                break
++            if "Não existem registros para os dados informados" in conteudo_visivel:
++                break
++            if "Nenhum registro encontrado" in conteudo_visivel:
++                break
++            if "Nenhum documento localizado para o destinatario" in conteudo_visivel:
++                break
++            if "Nenhum documento localizado para o destinatário" in conteudo_visivel:
++                break
++            if "Erro" in conteudo_visivel and "Pesquisar" not in conteudo_visivel:
++                break
++                
++            time.sleep(1.0)
++            
++        if any(msg in conteudo_visivel for msg in [
++            "Não existe registro para os dados informados",
++            "Não existem registros para os dados informados",
++            "Nenhum registro encontrado",
++            "Nenhum documento localizado para o destinatario",
++            "Nenhum documento localizado para o destinatário"
++        ]):
+             log(f"Nenhum registro de manifestação encontrado para {nome_cliente}.", "INFO")
+             save_client_status_nota_fiscal_xml(cnpj_cliente, nome_cliente, "Sucesso", "Sem Registros", current_mes_ano)
+             return (0, 0, 0)
+             
+-        chaves = list(dict.fromkeys(re.findall(r'(?<!\d)\d{44}(?!\d)', conteudo_html)))
+         if not chaves:
+             log("Aviso: Chave de acesso não localizada na página.", "WARNING")
+             msg_erro = "Chave de acesso não localizada na página."
+@@ -1310,6 +1412,14 @@ def executar_varredura_nfe_para_cliente(page, config, cnpj_cliente, nome_cliente
+                 save_client_status_nota_fiscal_xml(cnpj_cliente, nome_cliente, "Erro", "Chaves encontradas, mas nenhuma baixada", current_mes_ano)
+                 
+     except Exception as err_global:
++        try:
++            os.makedirs("temp", exist_ok=True)
++            screenshot_path = os.path.join("temp", f"erro_{cnpj_clean}.png")
++            page.screenshot(path=screenshot_path)
++            log(f"Screenshot do erro salvo em: '{screenshot_path}'", "INFO")
++        except Exception as e_snap:
++            log(f"Não foi possível salvar screenshot do erro: {e_snap}", "WARNING")
++            
+         forcar_todos = "--forcar-todos" in sys.argv
+         if not forcar_todos and possui_xml_existente:
+             log(f"[RECOVERY] Falha no fluxo global de consulta para {nome_cliente}, mas mantendo os XMLs existentes.", "SUCCESS")
+@@ -1542,6 +1652,7 @@ def main():
+             
+             with sync_playwright() as p:
+                 user_data_dir = os.path.join(os.getcwd(), "temp", f"chrome_profile_{cond['cnpj']}")
++                limpar_cache_perfil_chrome(user_data_dir, cond['cnpj'])
+                 os.makedirs(user_data_dir, exist_ok=True)
+                 
+                 lock_file = os.path.join(user_data_dir, "SingletonLock")
+@@ -1628,6 +1739,7 @@ def main():
+             
+         with sync_playwright() as p:
+             user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_nota_fiscal_xml")
++            limpar_cache_perfil_chrome(user_data_dir, None)
+             os.makedirs(user_data_dir, exist_ok=True)
+             
+             lock_file = os.path.join(user_data_dir, "SingletonLock")

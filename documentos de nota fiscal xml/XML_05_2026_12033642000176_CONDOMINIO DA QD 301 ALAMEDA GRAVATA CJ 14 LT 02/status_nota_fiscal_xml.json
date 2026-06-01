@@ -1,0 +1,9 @@
+{
+    "cnpj": "12033642000176",
+    "nome": "CONDOMINIO DA QD 301 ALAMEDA GRAVATA CJ 14 LT 02",
+    "data_consulta": "2026-05-28",
+    "hora_consulta": "17:36:55",
+    "status": "Erro",
+    "detalhes": "Certificado digital expirado ou inválido no portal da NF-e",
+    "contador_falhas_hoje": 4
+}
