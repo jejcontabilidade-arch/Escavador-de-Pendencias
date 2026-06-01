@@ -1114,7 +1114,7 @@ def webhook_whatsapp():
                         pass
                 return False
  
-            def iniciar_xml_callback(forcar_todos=False, destinatario=None):
+            def iniciar_xml_callback(forcar_todos=False, destinatario=None, cliente_filtro=None):
                 global processo_nota_fiscal_xml
                 rodando_teste, _ = is_process_running_by_script("consultar_nota_fiscal_xml.py")
                 if rodando_teste or (processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None):
@@ -1124,6 +1124,8 @@ def webhook_whatsapp():
                     cmd.append("--forcar-todos")
                 if destinatario:
                     cmd.extend(["--destinatario", destinatario])
+                if cliente_filtro:
+                    cmd.extend(["--cliente", cliente_filtro])
                     
                 startupinfo = None
                 creationflags = 0

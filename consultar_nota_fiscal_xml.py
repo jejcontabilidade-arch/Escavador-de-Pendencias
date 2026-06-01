@@ -237,6 +237,47 @@ def enviar_whatsapp(mensagem, config, destinatario=None):
     threading.Thread(target=worker, daemon=True).start()
     return True
 
+def enviar_documento_whatsapp_local(caminho_arquivo, nome_arquivo, config, destinatario):
+    if not config.get("whatsapp_enabled") or not destinatario:
+        return False
+        
+    def worker():
+        try:
+            import base64
+            with open(caminho_arquivo, "rb") as f:
+                base64_content = base64.b64encode(f.read()).decode("utf-8")
+                
+            ext = os.path.splitext(nome_arquivo)[1].lower()
+            mime = "application/octet-stream"
+            if ext == ".pdf":
+                mime = "application/pdf"
+            elif ext == ".xlsx":
+                mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            elif ext == ".xml":
+                mime = "application/xml"
+                
+            document_payload = f"data:{mime};base64,{base64_content}"
+            
+            url = "http://127.0.0.1:3000/api/send-document"
+            payload = {
+                "to": destinatario,
+                "document": document_payload,
+                "fileName": nome_arquivo
+            }
+            
+            log(f"[WHATSAPP] Enviando documento '{nome_arquivo}' via gateway local em segundo plano...", "INFO")
+            response = requests.post(url, json=payload, timeout=30)
+            if response.status_code in [200, 201]:
+                log(f"[WHATSAPP] Documento '{nome_arquivo}' enviado com sucesso!", "SUCCESS")
+            else:
+                log(f"[WHATSAPP] Falha ao enviar documento. Status: {response.status_code}, Resposta: {response.text}", "ERROR")
+        except Exception as e:
+            log(f"[WHATSAPP] Erro ao enviar documento via gateway: {e}", "ERROR")
+
+    import threading
+    threading.Thread(target=worker, daemon=True).start()
+    return True
+
 # Limpar o nome da empresa para diretórios seguros
 def clean_filename(name):
     return "".join(c if c.isalnum() or c in " _-ÇçÁáÉéÍíÓóÚúÃãÕõÂâÊêÔôÀàÜü" else "_" for c in name).strip()
@@ -1393,6 +1434,9 @@ def executar_varredura_nfe_para_cliente(page, config, cnpj_cliente, nome_cliente
                 caminho_json = os.path.join(pasta_destino, f"{chave}.json")
                 converter_xml_nfe_para_json(caminho_salvar, caminho_json)
                 
+                if destinatario:
+                    enviar_documento_whatsapp_local(caminho_salvar, nome_arquivo, config, destinatario)
+                
                 chaves_baixadas += 1
                 sucessos += 1
                 
@@ -1620,6 +1664,14 @@ def main():
         except Exception:
             pass
             
+    cliente_filtro = None
+    if "--cliente" in sys.argv:
+        try:
+            idx = sys.argv.index("--cliente")
+            cliente_filtro = sys.argv[idx + 1]
+        except Exception:
+            pass
+            
     # Execução Multicliente Condomínios
     if "--condominios" in sys.argv:
         condominios = sincronizar_e_instalar_certificados_condominios()
@@ -1627,6 +1679,24 @@ def main():
             log("[MULTICLIENTE] Nenhum condomínio com certificado válido encontrado para processar.", "WARNING")
             salvar_estado_global(False, "Nenhum condomínio encontrado", 1, 0, 0, 0)
             return
+            
+        if cliente_filtro:
+            filtro_limpo = "".join(filter(str.isdigit, cliente_filtro))
+            cliente_filtro_lower = cliente_filtro.strip().lower()
+            if filtro_limpo:
+                condominios = [c for c in condominios if filtro_limpo in "".join(filter(str.isdigit, c["cnpj"]))]
+            else:
+                condominios = [c for c in condominios if cliente_filtro_lower in c["nome"].lower()]
+                
+            if not condominios:
+                msg_aviso = f"❌ Nenhum condomínio correspondente ao filtro '{cliente_filtro}' foi localizado para consulta de Notas Fiscais."
+                log(f"[MULTICLIENTE] {msg_aviso}", "WARNING")
+                if destinatario:
+                    enviar_whatsapp(msg_aviso, config, destinatario)
+                salvar_estado_global(False, f"Filtro '{cliente_filtro}' não encontrado", 1, 0, 0, 0)
+                return
+            else:
+                log(f"[MULTICLIENTE] Filtro '{cliente_filtro}' aplicado. Processando apenas {len(condominios)} condomínio(s): {[c['nome'] for c in condominios]}", "SUCCESS")
             
         total_clientes = len(condominios)
         log(f"[MULTICLIENTE] Iniciando varredura para {total_clientes} condomínio(s)...", "SYSTEM")
@@ -1698,6 +1768,16 @@ def main():
         resultados_finais = compilar_resultados_fiscais()
         gerar_excel_resumo(resultados_finais)
         salvar_estado_global(False, "Varredura Concluída", total_clientes, total_clientes, sucessos_totais, falhas_totais)
+        
+        if cliente_filtro and destinatario:
+            msg_final = (
+                f"🤖 *Consulta de Nota Fiscal XML Concluída!*\n\n"
+                f"• *Cliente:* {condominios[0]['nome']}\n"
+                f"• *Notas Baixadas:* {sucessos_totais}\n"
+                f"• *Falhas:* {falhas_totais}\n\n"
+                f"Os arquivos XML das novas notas já foram enviados no seu chat."
+            )
+            enviar_whatsapp(msg_final, config, destinatario)
         
     else:
         # Modo normal (individual / contador)

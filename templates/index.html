@@ -2150,7 +2150,7 @@
             if (numero) {
                 titulo.innerText = "Editar Contato Autorizado";
                 inputNumero.value = numero;
-                inputNumero.disabled = true; // Não permite mudar o número na edição
+                inputNumero.disabled = false; // Habilitado para edição
                 inputNome.value = nome;
                 selectPermissao.value = permissao;
             } else {
@@ -2182,6 +2182,22 @@
             if (cleanNumber.length < 8) {
                 showToast("Número de WhatsApp inválido.", "warning");
                 return;
+            }
+
+            // Se o número anterior era diferente e estamos editando, deleta o antigo primeiro
+            if (editandoContatoNumero && editandoContatoNumero !== cleanNumber) {
+                try {
+                    const deleteResponse = await fetch(`/api/autorizados/${editandoContatoNumero}`, {
+                        method: 'DELETE'
+                    });
+                    if (!deleteResponse.ok) {
+                        showToast("Erro ao remover o número anterior na edição.", "error");
+                        return;
+                    }
+                } catch (err) {
+                    showToast("Erro de rede ao remover o número anterior.", "error");
+                    return;
+                }
             }
 
             const payload = {
