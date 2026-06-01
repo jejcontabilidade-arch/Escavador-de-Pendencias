@@ -532,13 +532,26 @@ Retorne estritamente um JSON no seguinte formato (sem formatação markdown ou b
                 elif has_nfe and has_ecac:
                     res_val["intencao"] = "obter_status"
             elif intencao in ["iniciar_varredura", "iniciar_varredura_total", "iniciar_nota_fiscal_xml"]:
-                if has_nfe and not has_ecac:
+                if has_nfe:
                     res_val["intencao"] = "iniciar_nota_fiscal_xml"
-                elif has_ecac and not has_nfe:
+                elif has_ecac:
                     if any(w in t_msg for w in ["todos", "completo", "forçar", "forcar", "do inicio", "do início", "todo"]):
                         res_val["intencao"] = "iniciar_varredura_total"
                     else:
                         res_val["intencao"] = "iniciar_varredura"
+            
+            # Redirecionamento por empresa detectada (apenas se for comando de inicialização e tiver filtro específico)
+            empresa_detectada = res_val.get("empresa")
+            if empresa_detectada and res_val.get("intencao") in ["iniciar_varredura", "iniciar_varredura_total", "iniciar_nota_fiscal_xml"]:
+                empresa_detectada_lower = empresa_detectada.strip().lower()
+                termos_operacionais = [
+                    "todos", "todas", "todos os clientes", "todas as empresas", 
+                    "inicio", "início", "do inicio", "do início", "todos do inicio", 
+                    "todos do início", "inicio nota fiscal", "início nota fiscal",
+                    "nota fiscal", "nota", "notas", "xml", "nfe", "completo", "completa", "tudo"
+                ]
+                if empresa_detectada_lower not in termos_operacionais:
+                    res_val["intencao"] = "iniciar_nota_fiscal_xml"
             
             # Atualiza histórico se for uma resposta válida do modelo
             if sender_clean:
@@ -567,8 +580,8 @@ def interpretar_mensagem_heuristica(texto):
             return {"intencao": "baixar_consolidado_nfe", "empresa": None, "cnpj": None, "resposta_humana": None}
     
     # Palavras de início e parada
-    iniciar_words = ["iniciar", "começar", "comecar", "rodar", "executar", "escavar"]
-    parar_words = ["parar", "interromper", "para", "cancela", "cancelar", "derrubar", "matar"]
+    iniciar_words = ["iniciar", "começar", "comecar", "rodar", "executar", "escavar", "varredura", "busca"]
+    parar_words = ["parar", "interromper", "pare", "cancela", "cancelar", "derrubar", "matar"]
     
     has_iniciar = any(w in t for w in iniciar_words)
     has_parar = any(w in t for w in parar_words)
@@ -594,7 +607,11 @@ def interpretar_mensagem_heuristica(texto):
         palavras = texto.split()
         para_idx = -1
         for idx, w in enumerate(palavras):
-            if w in ["de", "do", "da", "para", "cliente"]:
+            if w.lower() in ["de", "do", "da", "para", "cliente"]:
+                if idx < len(palavras) - 1:
+                    next_w = palavras[idx + 1].lower()
+                    if next_w in ["nota", "notas", "xml", "nfe", "varredura", "cliente"]:
+                        continue
                 para_idx = idx
                 break
         if para_idx != -1 and para_idx < len(palavras) - 1:
