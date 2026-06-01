@@ -210,7 +210,7 @@ def listar_clientes_por_status(config, st_procurado):
         
     return f"🤖 *{titulo}*:\n" + "\n".join(clientes_list)
 
-def localizar_e_enviar_documento(nome_pesquisa, config, destinatario=None):
+def localizar_e_enviar_documento(nome_pesquisa, config, destinatario=None, apenas_xml=False):
     # Sanitizar nome da busca
     busca_term = nome_pesquisa.strip().lower()
     if len(busca_term) < 3:
@@ -219,6 +219,45 @@ def localizar_e_enviar_documento(nome_pesquisa, config, destinatario=None):
     relatorios_dir = config.get("relatorios_dir", "relatorios")
     xml_dir = "documentos de nota fiscal xml"
     
+    if apenas_xml:
+        # Busca focada apenas na pasta de XMLs de Notas Fiscais
+        pastas_candidatas = []
+        if os.path.exists(xml_dir):
+            for d in os.listdir(xml_dir):
+                if os.path.isdir(os.path.join(xml_dir, d)) and busca_term in d.lower():
+                    pastas_candidatas.append((os.path.join(xml_dir, d), d))
+                    
+        if not pastas_candidatas:
+            return f"❌ Não localizei nenhuma pasta de Notas Fiscais XML para o cliente '{nome_pesquisa}'. Deseja que eu inicie uma busca agora no portal nacional da NF-e para este cliente? (Diga: 'iniciar busca de nota para {nome_pesquisa}')"
+            
+        xmls_encontrados = []
+        for caminho_pasta, nome_pasta in pastas_candidatas:
+            arquivos = glob.glob(os.path.join(caminho_pasta, "*.xml"))
+            for arq in arquivos:
+                xmls_encontrados.append((os.path.getmtime(arq), arq))
+                
+        if not xmls_encontrados:
+            return f"❌ Não encontrei nenhum arquivo de nota fiscal (.xml) para o cliente '{nome_pesquisa}'. Deseja iniciar uma busca? (Diga: 'iniciar busca de nota para {nome_pesquisa}')"
+            
+        # Ordenar por data de modificação decrescente (mais recentes primeiro)
+        xmls_encontrados.sort(key=lambda x: x[0], reverse=True)
+        
+        # Enviar até os 5 XMLs mais recentes para não sobrecarregar
+        qtd_enviar = min(len(xmls_encontrados), 5)
+        enviados = 0
+        for i in range(qtd_enviar):
+            arq_path = xmls_encontrados[i][1]
+            nome_arq = os.path.basename(arq_path)
+            if enviar_documento_whatsapp(arq_path, nome_arq, config, destinatario):
+                enviados += 1
+                time.sleep(1.0)
+                
+        if enviados > 0:
+            return f"✅ Enviei {enviados} nota(s) fiscal(is) XML mais recente(s) de '{nome_pesquisa}' para o seu chat!"
+        else:
+            return f"❌ Falha ao enviar as notas fiscais de '{nome_pesquisa}' via WhatsApp. Verifique as configurações do gateway."
+            
+    # Caso geral (e-CAC ou busca padrão)
     # Encontrar pastas candidatas em ambos os diretórios
     pastas_candidatas = []
     if os.path.exists(relatorios_dir):
@@ -257,7 +296,7 @@ def localizar_e_enviar_documento(nome_pesquisa, config, destinatario=None):
     if not arquivos_ordenados:
         return f"A pasta de documentos do cliente está vazia no momento."
         
-    # Ordenar por peso decrescente, e depois por data de modificação decrescente
+    # Ordenar por data de modificação decrescente, e depois por peso decrescente
     arquivos_ordenados.sort(key=lambda x: (x[0], x[1]), reverse=True)
     caminho_final = arquivos_ordenados[0][2]
     nome_final = os.path.basename(caminho_final)
@@ -353,11 +392,19 @@ def verificar_permissao_numero(numero, config):
         c_num = normalizar_numero(c["whatsapp_number"])
         if num_clean == c_num:
             return c
+        # Comparação robusta (tolerância a 9º dígito): DDD + últimos 8 dígitos iguais
+        if len(num_clean) >= 10 and len(c_num) >= 10:
+            if num_clean[:2] == c_num[:2] and num_clean[-8:] == c_num[-8:]:
+                return c
             
     auth_number = config.get("whatsapp_number", "")
     auth_clean = normalizar_numero(auth_number)
-    if auth_clean and num_clean == auth_clean:
-        return {"whatsapp_number": auth_clean, "nome": "Willian Administrador", "permissao": "admin"}
+    if auth_clean:
+        if num_clean == auth_clean:
+            return {"whatsapp_number": auth_clean, "nome": "Willian Administrador", "permissao": "admin"}
+        if len(num_clean) >= 10 and len(auth_clean) >= 10:
+            if num_clean[:2] == auth_clean[:2] and num_clean[-8:] == auth_clean[-8:]:
+                return {"whatsapp_number": auth_clean, "nome": "Willian Administrador", "permissao": "admin"}
         
     return None
 
@@ -425,14 +472,14 @@ As intenções suportadas são:
 1. "iniciar_varredura" (Iniciar varredura comum do dia do e-CAC, ignorando quem já deu sucesso. Restrito a administradores e operadores)
 2. "iniciar_varredura_total" (Forçar escavação completa de todos os clientes do início do e-CAC. Restrito a administradores)
 3. "interromper_varredura" (Interromper ou parar a execução ativa do robô do e-CAC. Restrito a administradores)
-4. "iniciar_nota_fiscal_xml" (Iniciar varredura de Notas Fiscais XML no portal nacional. Restrito a administradores e operadores)
+4. "iniciar_nota_fiscal_xml" (Iniciar varredura de Notas Fiscais XML no portal nacional. Se o usuário pedir para buscar ou fazer varredura de notas fiscais, seja do início/todas ou de um cliente específico/único, defina esta intenção. Se for para um cliente específico, preencha o parâmetro 'empresa' com o nome ou CNPJ do cliente, senão deixe nulo. Restrito a administradores e operadores)
 5. "interromper_nota_fiscal_xml" (Interromper a varredura ativa de Notas Fiscais XML. Restrito a administradores)
 6. "obter_status_ecac" (Consultar status atual, progresso e estatísticas do robô e-CAC. Permitido a todos)
 7. "obter_status_nfe" (Consultar status atual, progresso e estatísticas do robô de Notas Fiscais XML. Permitido a todos)
 8. "obter_status" (Consultar status geral de ambos os robôs: e-CAC e NF-e XML. Permitido a todos)
 9. "listar_clientes_ok" (Consultar lista de clientes com sucesso hoje. Permitido a todos)
 10. "listar_clientes_pendentes_erro" (Consultar lista de clientes com falhas ou pendentes hoje. Permitido a todos)
-11. "baixar_documento" (Baixar ou obter a certidão/relatório/notas de um cliente específico. Requer o parâmetro 'empresa')
+11. "baixar_documento" (Baixar ou obter a certidão/relatório do e-CAC ou notas fiscais XML já baixadas de um cliente específico. Requer o parâmetro 'empresa')
 12. "baixar_consolidado_ecac" (Obter a planilha Excel consolidada principal de pendências do e-CAC. Não requer parâmetro 'empresa')
 13. "baixar_consolidado_nfe" (Obter a planilha Excel consolidada principal de Notas Fiscais XML. Não requer parâmetro 'empresa')
 14. "adicionar_cliente" (Adicionar um novo cliente/empresa ao sistema. Requer o nome completo em 'empresa' e o CNPJ/CPF em 'cnpj'. Restrito a administradores e operadores)
@@ -471,19 +518,27 @@ Retorne estritamente um JSON no seguinte formato (sem formatação markdown ou b
             content = response.json()["choices"][0]["message"]["content"]
             res_val = json.loads(content)
             
-            # Failsafe: Correção heurística de segurança para a intenção de status
+            # Failsafe: Correção heurística de segurança para a intenção de status ou inicialização
             intencao = res_val.get("intencao")
+            t_msg = texto_mensagem.lower()
+            has_nfe = any(w in t_msg for w in ["xml", "nota", "nfe", "notas", "nota fiscal"])
+            has_ecac = any(w in t_msg for w in ["ecac", "e-cac", "varredura", "pendencia", "pendencias"])
+            
             if intencao in ["obter_status_ecac", "obter_status_nfe", "obter_status"]:
-                t_msg = texto_mensagem.lower()
-                has_nfe = any(w in t_msg for w in ["xml", "nota", "nfe", "notas", "nota fiscal"])
-                has_ecac = any(w in t_msg for w in ["ecac", "e-cac", "varredura", "pendencia", "pendencias"])
-                
                 if has_nfe and not has_ecac:
                     res_val["intencao"] = "obter_status_nfe"
                 elif has_ecac and not has_nfe:
                     res_val["intencao"] = "obter_status_ecac"
                 elif has_nfe and has_ecac:
                     res_val["intencao"] = "obter_status"
+            elif intencao in ["iniciar_varredura", "iniciar_varredura_total", "iniciar_nota_fiscal_xml"]:
+                if has_nfe and not has_ecac:
+                    res_val["intencao"] = "iniciar_nota_fiscal_xml"
+                elif has_ecac and not has_nfe:
+                    if any(w in t_msg for w in ["todos", "completo", "forçar", "forcar", "do inicio", "do início", "todo"]):
+                        res_val["intencao"] = "iniciar_varredura_total"
+                    else:
+                        res_val["intencao"] = "iniciar_varredura"
             
             # Atualiza histórico se for uma resposta válida do modelo
             if sender_clean:
@@ -535,7 +590,16 @@ def interpretar_mensagem_heuristica(texto):
             return {"intencao": "obter_status", "empresa": None, "cnpj": None, "resposta_humana": None}
         
     elif is_xml_related and has_iniciar:
-        return {"intencao": "iniciar_nota_fiscal_xml", "empresa": None, "cnpj": None, "resposta_humana": None}
+        empresa = None
+        palavras = texto.split()
+        para_idx = -1
+        for idx, w in enumerate(palavras):
+            if w in ["de", "do", "da", "para", "cliente"]:
+                para_idx = idx
+                break
+        if para_idx != -1 and para_idx < len(palavras) - 1:
+            empresa = " ".join(palavras[para_idx + 1:])
+        return {"intencao": "iniciar_nota_fiscal_xml", "empresa": empresa, "cnpj": None, "resposta_humana": None}
         
     elif has_iniciar:
         has_todos = any(w in t for w in ["todos", "completo", "forçar", "forcar", "do inicio", "do início"])
@@ -719,6 +783,20 @@ def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_cal
     cnpj = res.get("cnpj")
     resposta_humana = res.get("resposta_humana")
     
+    # Higienização de termos operacionais capturados erroneamente no campo 'empresa'
+    if empresa and intencao in ["iniciar_nota_fiscal_xml", "iniciar_varredura", "iniciar_varredura_total"]:
+        empresa_lower = empresa.strip().lower()
+        termos_operacionais = [
+            "todos", "todas", "todos os clientes", "todas as empresas", 
+            "inicio", "início", "do inicio", "do início", "todos do inicio", 
+            "todos do início", "inicio nota fiscal", "início nota fiscal",
+            "nota fiscal", "nota", "notas", "xml", "nfe", "completo", "completa", "tudo"
+        ]
+        if empresa_lower in termos_operacionais:
+            log(f"Filtro de empresa '{empresa}' identificado como termo operacional. Limpando filtro para execução geral.", "AGENTE")
+            empresa = None
+            resposta_humana = None
+            
     log(f"Intenção detectada: '{intencao}' (Empresa: '{empresa}', CNPJ: '{cnpj}')")
     
     # Restrições de papel
@@ -780,10 +858,20 @@ def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_cal
             if not resposta_humana:
                 enviar_mensagem_whatsapp("🤖 A consulta de Notas Fiscais XML já está rodando no momento.", config, destinatario=sender_clean)
         else:
-            if not resposta_humana:
-                enviar_mensagem_whatsapp("🤖 *Entendido!* Estou iniciando a consulta de Notas Fiscais XML agora em segundo plano. Se houver CAPTCHAs, te avisarei aqui.", config, destinatario=sender_clean)
-            if iniciar_xml_callback:
-                iniciar_xml_callback(forcar_todos=False, destinatario=sender_clean)
+            t_msg_lower = texto_mensagem.lower()
+            quer_forcar = any(w in t_msg_lower for w in ["todos", "completo", "forçar", "forcar", "do inicio", "do início", "todo"])
+            tipo_busca = "completa (do início)" if quer_forcar else "padrão"
+            
+            if empresa:
+                if not resposta_humana:
+                    enviar_mensagem_whatsapp(f"🤖 *Entendido!* Estou iniciando a consulta {tipo_busca} de Notas Fiscais XML exclusivamente para o cliente *{empresa}* em segundo plano. Assim que as notas forem baixadas, eu as enviarei aqui.", config, destinatario=sender_clean)
+                if iniciar_xml_callback:
+                    iniciar_xml_callback(forcar_todos=quer_forcar, destinatario=sender_clean, cliente_filtro=empresa)
+            else:
+                if not resposta_humana:
+                    enviar_mensagem_whatsapp(f"🤖 *Entendido!* Estou iniciando a consulta {tipo_busca} de Notas Fiscais XML para todos os clientes em segundo plano. Se houver CAPTCHAs, te avisarei aqui.", config, destinatario=sender_clean)
+                if iniciar_xml_callback:
+                    iniciar_xml_callback(forcar_todos=quer_forcar, destinatario=sender_clean)
             
     elif intencao == "interromper_nota_fiscal_xml":
         if not processo_xml_ativo:
@@ -825,7 +913,12 @@ def processar_mensagem_recebida(payload, config, rodando_atualmente, iniciar_cal
         else:
             if not resposta_humana:
                 enviar_mensagem_whatsapp(f"🔍 Buscando arquivos fiscais de *{empresa}*...", config, destinatario=sender_clean)
-            msg_resposta = localizar_e_enviar_documento(empresa, config, destinatario=sender_clean)
+            
+            # Verificar se a mensagem original menciona nota fiscal / xml
+            msg_texto_lower = texto_mensagem.lower()
+            quer_xml = any(w in msg_texto_lower for w in ["xml", "nota", "notas", "nfe", "nota fiscal"])
+            
+            msg_resposta = localizar_e_enviar_documento(empresa, config, destinatario=sender_clean, apenas_xml=quer_xml)
             enviar_mensagem_whatsapp(msg_resposta, config, destinatario=sender_clean)
             
     elif intencao == "baixar_consolidado_ecac":
