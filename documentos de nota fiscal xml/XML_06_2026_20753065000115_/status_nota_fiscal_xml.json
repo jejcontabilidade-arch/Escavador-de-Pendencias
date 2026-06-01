@@ -1,0 +1,9 @@
+{
+    "cnpj": "20753065000115",
+    "nome": "",
+    "data_consulta": "2026-06-01",
+    "hora_consulta": "11:14:44",
+    "status": "Erro",
+    "detalhes": "Chaves encontradas, mas nenhuma baixada",
+    "contador_falhas_hoje": 1
+}

@@ -242,7 +242,48 @@ def localizar_e_enviar_documento(nome_pesquisa, config, destinatario=None, apena
         # Ordenar por data de modificação decrescente (mais recentes primeiro)
         xmls_encontrados.sort(key=lambda x: x[0], reverse=True)
         
-        # Enviar até os 5 XMLs mais recentes para não sobrecarregar
+        # Se houver mais de 2 XMLs, compactar em um único arquivo ZIP e enviar
+        if len(xmls_encontrados) > 2:
+            import zipfile
+            os.makedirs("temp", exist_ok=True)
+            # Limpar o nome da empresa para o nome do zip
+            nome_empresa_limpo = clean_filename(nome_pesquisa).replace(" ", "_")
+            nome_zip = f"XMLs_{nome_empresa_limpo}_{datetime.date.today().strftime('%Y%m%d')}.zip"
+            caminho_zip = os.path.join("temp", nome_zip)
+            
+            try:
+                # Pegar até as 10 notas mais recentes para colocar no zip
+                qtd_zip = min(len(xmls_encontrados), 10)
+                with zipfile.ZipFile(caminho_zip, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    for i in range(qtd_zip):
+                        arq_path = xmls_encontrados[i][1]
+                        zip_file.write(arq_path, os.path.basename(arq_path))
+                
+                log(f"[ZIP-XML] Compactados {qtd_zip} arquivos XML em '{caminho_zip}'")
+                
+                if enviar_documento_whatsapp(caminho_zip, nome_zip, config, destinatario):
+                    # Deletar arquivo temporário zip
+                    try:
+                        os.remove(caminho_zip)
+                    except:
+                        pass
+                    return f"📦 Compactei as {qtd_zip} notas fiscais XML mais recentes de '{nome_pesquisa}' em um único arquivo ZIP e enviei no seu chat!"
+                else:
+                    try:
+                        os.remove(caminho_zip)
+                    except:
+                        pass
+                    return f"❌ Falha ao enviar o arquivo ZIP de notas fiscais de '{nome_pesquisa}' via WhatsApp."
+            except Exception as e_zip:
+                log(f"Erro ao gerar/enviar arquivo ZIP de XMLs: {e_zip}", "ERROR")
+                # Fallback para o envio individual caso dê erro no zip
+                try:
+                    if os.path.exists(caminho_zip):
+                        os.remove(caminho_zip)
+                except:
+                    pass
+                
+        # Enviar até os 5 XMLs mais recentes de forma individual
         qtd_enviar = min(len(xmls_encontrados), 5)
         enviados = 0
         for i in range(qtd_enviar):
@@ -457,6 +498,16 @@ def interpretar_mensagem_com_gpt(texto_mensagem, config, usuario_nome="Usuário"
             "resposta_humana": f"🤖 Certo, {usuario_nome}! Nosso histórico de conversa foi limpo com sucesso. Como posso te ajudar agora?"
         }
         
+    # Normalização preventiva de homófonos e erros comuns de transcrição do Whisper
+    normalizacoes = {
+        r"\b(secac|se-cac|ecaque|secaca|sicac|si-cac|c-cac|sicaque)\b": "e-CAC",
+        r"\b(nfe|nfs|notafiscal|notasfiscais|nota fiscal|notas fiscais)\b": "Notas Fiscais XML",
+        r"\b(xmls|xml)\b": "XML"
+    }
+    texto_normalizado = texto_mensagem
+    for padrao, subst in normalizacoes.items():
+        texto_normalizado = re.sub(padrao, subst, texto_normalizado, flags=re.IGNORECASE)
+        
     url = "https://api.openai.com/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
@@ -467,6 +518,8 @@ def interpretar_mensagem_com_gpt(texto_mensagem, config, usuario_nome="Usuário"
 O usuário atual que está interagindo com você é o '{usuario_nome}' com o papel de '{usuario_role}'.
 Sua tarefa é analisar a mensagem do usuário, deduzir sua intenção operacional e gerar uma resposta em linguagem natural que seja extremamente humana, amigável, natural e adequada ao contexto.
 Você receberá o histórico de interações recentes logo abaixo (se houver). Use esse histórico para manter o contexto das intenções operacionais informadas anteriormente.
+
+Atenção: A mensagem do usuário pode ter sido enviada por áudio e transcrita via Whisper. Devido a isso, ignore pequenas discrepâncias gramaticais ou erros de homófonos fonéticos em termos contábeis (ex: 'secac', 'ecaque', 'sicac' referindo-se a 'e-CAC', ou 'notafiscal' referindo-se a 'Notas Fiscais'). Sempre interprete de forma tolerante a esses desvios.
 
 As intenções suportadas são:
 1. "iniciar_varredura" (Iniciar varredura comum do dia do e-CAC, ignorando quem já deu sucesso. Restrito a administradores e operadores)
@@ -503,7 +556,7 @@ Retorne estritamente um JSON no seguinte formato (sem formatação markdown ou b
     messages_payload = [{"role": "system", "content": prompt}]
     for msg in history:
         messages_payload.append(msg)
-    messages_payload.append({"role": "user", "content": texto_mensagem})
+    messages_payload.append({"role": "user", "content": texto_normalizado})
     
     payload = {
         "model": "gpt-4o-mini",

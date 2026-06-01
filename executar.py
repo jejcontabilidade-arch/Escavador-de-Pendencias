@@ -234,23 +234,30 @@ def fechar_modais_e_overlays(page):
 # Função auxiliar para checar e tratar a Caixa Postal bloqueante (lendo mensagens importantes para unblock)
 def checar_e_tratar_caixa_postal(page, client_dir, config):
     try:
-        # Detectar se o modal de aviso bloqueante está presente
-        btn_caixa = None
-        for selector in [
-            "button:has-text('Ir para a Caixa Postal')",
-            "input[value='Ir para a Caixa Postal']",
-            "text=Ir para a Caixa Postal"
-        ]:
-            try:
-                loc = page.locator(selector).first
-                if loc.is_visible(timeout=1000):
-                    btn_caixa = loc
-                    break
-            except Exception:
-                continue
+        max_mensagens = 5
+        mensagem_tratada_count = 0
         
-        if btn_caixa:
-            log("[ALERTA CRÍTICO] Caixa Postal bloqueante detectada! O e-CAC exige a leitura de mensagens importantes para unblock.", "WARNING")
+        while mensagem_tratada_count < max_mensagens:
+            # Detectar se o modal de aviso bloqueante está presente
+            btn_caixa = None
+            for selector in [
+                "button:has-text('Ir para a Caixa Postal')",
+                "input[value='Ir para a Caixa Postal']",
+                "text=Ir para a Caixa Postal"
+            ]:
+                try:
+                    loc = page.locator(selector).first
+                    if loc.is_visible(timeout=1000):
+                        btn_caixa = loc
+                        break
+                except Exception:
+                    continue
+            
+            if not btn_caixa:
+                break # Sai do loop se não houver aviso de caixa postal bloqueante
+                
+            mensagem_tratada_count += 1
+            log(f"[ALERTA CRÍTICO] Caixa Postal bloqueante detectada! Mensagem {mensagem_tratada_count} de {max_mensagens}.", "WARNING")
             
             # Clicar em "Ir para a Caixa Postal"
             btn_caixa.click()
@@ -312,8 +319,9 @@ def checar_e_tratar_caixa_postal(page, client_dir, config):
                 
                 log(f"[CAIXA-POSTAL] Alerta de Caixa Postal extraído: '{assunto[:60]}...'", "SUCCESS")
                 
-                # Gravar arquivo de alerta TXT e JSON para estruturação fácil no Excel
-                alerta_path = os.path.join(client_dir, "ALERTA_CAIXA_POSTAL.txt")
+                # Nome do arquivo com sufixo ou timestamp para evitar sobrescrever se forem múltiplas
+                sufixo = f"_{mensagem_tratada_count}" if mensagem_tratada_count > 1 else ""
+                alerta_path = os.path.join(client_dir, f"ALERTA_CAIXA_POSTAL{sufixo}.txt")
                 with open(alerta_path, "w", encoding="utf-8") as f:
                     f.write("============================================================\n")
                     f.write(" MENSAGEM IMPORTANTE / ALERTA DE EXCLUSÃO CAPTURADO NO e-CAC\n")
@@ -322,7 +330,7 @@ def checar_e_tratar_caixa_postal(page, client_dir, config):
                     f.write(f"Assunto      : {assunto}\n")
                     f.write(f"Conteúdo     :\n\n{conteudo}\n")
                 
-                alerta_json_path = os.path.join(client_dir, "ALERTA_CAIXA_POSTAL.json")
+                alerta_json_path = os.path.join(client_dir, f"ALERTA_CAIXA_POSTAL{sufixo}.json")
                 with open(alerta_json_path, "w", encoding="utf-8") as f:
                     json.dump({
                         "assunto": assunto,
@@ -330,16 +338,15 @@ def checar_e_tratar_caixa_postal(page, client_dir, config):
                         "data_captura": datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
                     }, f, indent=4, ensure_ascii=False)
                 
-                log(f"[CAIXA-POSTAL] Alerta salvo com sucesso em TXT e JSON: {client_dir}", "SUCCESS")
+                log(f"[CAIXA-POSTAL] Alerta {mensagem_tratada_count} salvo com sucesso: {client_dir}", "SUCCESS")
                 
                 # Retornar para a Home do e-CAC para resetar e continuar o fluxo sem o modal bloqueante!
                 log("[CAIXA-POSTAL] Retornando para a página inicial do e-CAC para prosseguir...", "ACTION")
                 page.goto(config["portal_url"])
                 page.wait_for_selector("text=Alterar perfil de acesso", timeout=10000)
-                
             else:
                 log("[CAIXA-POSTAL] Caixa Postal aberta, mas não foi possível localizar a mensagem unread correspondente.", "WARNING")
-                
+                break
     except Exception as e:
         log(f"Aviso ao tentar tratar Caixa Postal bloqueante: {e}. Prosseguindo com o fluxo...", "WARNING")
 
@@ -2252,7 +2259,7 @@ def main():
                     if forcar_todos:
                         remover_arquivos_fiscais_obsoletos(client_dir)
                         
-                    max_tentativas = 1
+                    max_tentativas = 3
                     sucesso_cliente = False
                     erro_final = None
                     url_erro = "N/A"
@@ -2338,13 +2345,8 @@ def main():
                             except Exception:
                                 pass
                                 
-                            # Redirecionar a página de situação fiscal de volta para a URL base dela
-                            try:
-                                log("Redirecionando a página de situação fiscal de volta para a sua URL base...", "INFO")
-                                situacao_fiscal_page.goto("https://servicos.receitafederal.gov.br/servico/pendencias/#/analise-pendencias", timeout=20000)
-                                situacao_fiscal_page.wait_for_load_state("load")
-                            except Exception as nav_err:
-                                log(f"Aviso: Falha ao redirecionar após erro JAPE: {nav_err}. A aba será fechada e reaberta.", "WARNING")
+                            # Fechar a página de situação fiscal para garantir uma tentativa limpa
+                            if situacao_fiscal_page:
                                 try:
                                     situacao_fiscal_page.close()
                                 except Exception:
@@ -2352,7 +2354,9 @@ def main():
                                 situacao_fiscal_page = None
 
                             sucesso_cliente = False
-                            break
+                            if tentativa < max_tentativas:
+                                log(f"[RECOVERY JAPE] Aguardando 15 segundos antes de tentar reabrir e consultar novamente (Tentativa {tentativa+1}/{max_tentativas})...", "WARNING")
+                                time.sleep(15)
                             
                         except Exception as e:
                             log(f"[ERRO - TENTATIVA {tentativa}/{max_tentativas}] Erro ao processar cliente {nome} ({cnpj}): {e}", "WARNING")

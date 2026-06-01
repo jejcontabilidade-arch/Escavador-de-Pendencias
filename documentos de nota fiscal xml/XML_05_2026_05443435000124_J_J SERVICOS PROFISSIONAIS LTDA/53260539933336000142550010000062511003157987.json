@@ -1,0 +1,1077 @@
+{
+    "@atributos": {
+        "versao": "4.00"
+    },
+    "NFe": {
+        "infNFe": {
+            "@atributos": {
+                "Id": "NFe53260539933336000142550010000062511003157987",
+                "versao": "4.00"
+            },
+            "ide": {
+                "cUF": 53,
+                "cNF": 315798,
+                "natOp": "VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCEIROS",
+                "mod": 55,
+                "serie": 1,
+                "nNF": 6251,
+                "dhEmi": "2026-05-29T08:19:29-03:00",
+                "tpNF": 1,
+                "idDest": 1,
+                "cMunFG": 5300108,
+                "tpImp": 1,
+                "tpEmis": 1,
+                "cDV": 7,
+                "tpAmb": 1,
+                "finNFe": 1,
+                "indFinal": 0,
+                "indPres": 1,
+                "indIntermed": 0,
+                "procEmi": 0,
+                "verProc": "Sistema 365 - 3.5"
+            },
+            "emit": {
+                "CNPJ": 39933336000142,
+                "xNome": "FUSAO PAPELARIA E LIVRARIA EIRELI",
+                "xFant": "FUSAO PAPELARIA",
+                "enderEmit": {
+                    "xLgr": "SHCGN CLR QD 706 BLOCO D ENTRADA 57",
+                    "nro": "SN",
+                    "xBairro": "ASA NORTE",
+                    "cMun": 5300108,
+                    "xMun": "BRASILIA",
+                    "UF": "DF",
+                    "CEP": 70740514,
+                    "cPais": 1058,
+                    "xPais": "BRASIL"
+                },
+                "IE": 801902000127,
+                "CRT": 1
+            },
+            "dest": {
+                "CNPJ": 5443435000124,
+                "xNome": "J&J SERVICOS PROFISSIONAIS LTDA",
+                "enderDest": {
+                    "xLgr": "CLS 312 BLOCO A SOBRELOJA",
+                    "nro": 6,
+                    "xBairro": "ASA SUL",
+                    "cMun": 5300108,
+                    "xMun": "BRASILIA",
+                    "UF": "DF",
+                    "CEP": 70365510,
+                    "cPais": 1058,
+                    "xPais": "BRASIL",
+                    "fone": 32454290
+                },
+                "indIEDest": 1,
+                "IE": 752962400111,
+                "email": "jcezarlopes@hotmail.com"
+            },
+            "det": [
+                {
+                    "@atributos": {
+                        "nItem": "1"
+                    },
+                    "prod": {
+                        "cProd": 534769,
+                        "cEAN": 7897254101651,
+                        "xProd": "TINTA P/ CARIMBO ASUPER TINCAR 40ML PRETA RADEX",
+                        "NCM": 32159000,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 1,
+                        "vUnCom": 3.9,
+                        "vProd": 3.9,
+                        "cEANTrib": 7897254101651,
+                        "uTrib": "UN",
+                        "qTrib": 1,
+                        "vUnTrib": 3.9,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "2"
+                    },
+                    "prod": {
+                        "cProd": 534771,
+                        "cEAN": 7897254101323,
+                        "xProd": "TINTA P/ CARIMBO ASUPER TINCAR 40ML VERMELHA RADEX",
+                        "NCM": 32159000,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 1,
+                        "vUnCom": 3.45,
+                        "vProd": 3.45,
+                        "cEANTrib": 7897254101323,
+                        "uTrib": "UN",
+                        "qTrib": 1,
+                        "vUnTrib": 3.45,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 2
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "3"
+                    },
+                    "prod": {
+                        "cProd": 69685,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "COLA BRANCA 1KG CB-1000 PIRATININGA",
+                        "NCM": 35069190,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 1,
+                        "vUnCom": 12.95,
+                        "vProd": 12.95,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 1,
+                        "vUnTrib": 12.95,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 3
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "4"
+                    },
+                    "prod": {
+                        "cProd": 516066,
+                        "cEAN": 7898094380015,
+                        "xProd": "ELASTICO AMARELO 1KG MAMUTH",
+                        "NCM": 40169990,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 1,
+                        "vUnCom": 34,
+                        "vProd": 34.0,
+                        "cEANTrib": 7898094380015,
+                        "uTrib": "UN",
+                        "qTrib": 1,
+                        "vUnTrib": 34,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 4
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "5"
+                    },
+                    "prod": {
+                        "cProd": 34674,
+                        "cEAN": 7896603899959,
+                        "xProd": "FITA EMPACOTAMENTO 48MMX45MM TRANSPARENTE ADELBRAS",
+                        "NCM": 39191010,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 1,
+                        "vUnCom": 3.95,
+                        "vProd": 3.95,
+                        "cEANTrib": 7896603899959,
+                        "uTrib": "UN",
+                        "qTrib": 1,
+                        "vUnTrib": 3.95,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 5
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "6"
+                    },
+                    "prod": {
+                        "cProd": 62411,
+                        "cEAN": 7898497710013,
+                        "xProd": "ESPIRAL P/ ENCADERNACAO 07MM PRETO C/ 100",
+                        "NCM": 39261000,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 2,
+                        "vUnCom": 15.3,
+                        "vProd": 30.6,
+                        "cEANTrib": 7898497710013,
+                        "uTrib": "UN",
+                        "qTrib": 2,
+                        "vUnTrib": 15.3,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 6
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "7"
+                    },
+                    "prod": {
+                        "cProd": 61632,
+                        "cEAN": 7898497710082,
+                        "xProd": "ESPIRAL P/ ENCADERNACAO 25MM PRETO C/ 48",
+                        "NCM": 39162000,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 2,
+                        "vUnCom": 33.32,
+                        "vProd": 66.64,
+                        "cEANTrib": 7898497710082,
+                        "uTrib": "UN",
+                        "qTrib": 2,
+                        "vUnTrib": 33.32,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 7
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "8"
+                    },
+                    "prod": {
+                        "cProd": 745714,
+                        "cEAN": 7898497710068,
+                        "xProd": "ESPIRAL P/ ENCADERNACAO 20MM PRETO PC C/ 80",
+                        "NCM": 39162000,
+                        "CFOP": 5102,
+                        "uCom": "PC",
+                        "qCom": 2,
+                        "vUnCom": 33.32,
+                        "vProd": 66.64,
+                        "cEANTrib": 7898497710068,
+                        "uTrib": "PC",
+                        "qTrib": 2,
+                        "vUnTrib": 33.32,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 8
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "9"
+                    },
+                    "prod": {
+                        "cProd": 8685,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "CAPA P/ ENCADERNACAO A4 PVC CRISTAL PC C/100",
+                        "NCM": 39261000,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 2,
+                        "vUnCom": 71.4,
+                        "vProd": 142.8,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 2,
+                        "vUnTrib": 71.4,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 9
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "10"
+                    },
+                    "prod": {
+                        "cProd": 61589,
+                        "cEAN": 7899432600437,
+                        "xProd": "CAPA P/ ENCADERNACAO A4 PVC PRETO C/100",
+                        "NCM": 39209990,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 2,
+                        "vUnCom": 25.5,
+                        "vProd": 51.0,
+                        "cEANTrib": 7899432600437,
+                        "uTrib": "UN",
+                        "qTrib": 2,
+                        "vUnTrib": 25.5,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 10
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "11"
+                    },
+                    "prod": {
+                        "cProd": 64845,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "MARCA TEXTO LUMINI ROSA CIS",
+                        "NCM": 96082000,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 6,
+                        "vUnCom": 2.21,
+                        "vProd": 13.26,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 6,
+                        "vUnTrib": 2.21,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 11
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "12"
+                    },
+                    "prod": {
+                        "cProd": 68554,
+                        "cEAN": "SEM GTIN",
+                        "xProd": "MARCA TEXTO LUMINI VERDE CIS",
+                        "NCM": 96082000,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 6,
+                        "vUnCom": 2.21,
+                        "vProd": 13.26,
+                        "cEANTrib": "SEM GTIN",
+                        "uTrib": "UN",
+                        "qTrib": 6,
+                        "vUnTrib": 2.21,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 12
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "13"
+                    },
+                    "prod": {
+                        "cProd": 68555,
+                        "cEAN": 7896326912188,
+                        "xProd": "MARCA TEXTO LUMINI AMARELO CIS",
+                        "NCM": 96082000,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 6,
+                        "vUnCom": 2.21,
+                        "vProd": 13.26,
+                        "cEANTrib": 7896326912188,
+                        "uTrib": "UN",
+                        "qTrib": 6,
+                        "vUnTrib": 2.21,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 13
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "14"
+                    },
+                    "prod": {
+                        "cProd": 505167,
+                        "cEAN": 7891040137589,
+                        "xProd": "COLA BASTAO 40G SCOTCH 3M",
+                        "NCM": 35061090,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 6,
+                        "vUnCom": 16.76,
+                        "vProd": 100.56,
+                        "cEANTrib": 7891040137589,
+                        "uTrib": "UN",
+                        "qTrib": 6,
+                        "vUnTrib": 16.76,
+                        "indTot": 1,
+                        "xPed": 315798,
+                        "nItemPed": 14
+                    },
+                    "imposto": {
+                        "vTotTrib": 0.0,
+                        "ICMS": {
+                            "ICMSSN102": {
+                                "orig": 0,
+                                "CSOSN": 102
+                            }
+                        },
+                        "IPI": {
+                            "cEnq": 999,
+                            "IPITrib": {
+                                "CST": 99,
+                                "vBC": 0.0,
+                                "pIPI": 0.0,
+                                "vIPI": 0.0
+                            }
+                        },
+                        "II": {
+                            "vBC": 0.0,
+                            "vDespAdu": 0.0,
+                            "vII": 0.0,
+                            "vIOF": 0.0
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pPIS": 0.0,
+                                "vPIS": 0.0
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 0.0,
+                                "pCOFINS": 0.0,
+                                "vCOFINS": 0.0
+                            }
+                        }
+                    }
+                }
+            ],
+            "total": {
+                "ICMSTot": {
+                    "vBC": 0.0,
+                    "vICMS": 0.0,
+                    "vICMSDeson": 0.0,
+                    "vICMSUFDest": 0.0,
+                    "vICMSUFRemet": 0.0,
+                    "vFCP": 0.0,
+                    "vBCST": 0.0,
+                    "vST": 0.0,
+                    "vFCPST": 0.0,
+                    "vFCPSTRet": 0.0,
+                    "vProd": 556.27,
+                    "vFrete": 0.0,
+                    "vSeg": 0.0,
+                    "vDesc": 0.0,
+                    "vII": 0.0,
+                    "vIPI": 0.0,
+                    "vIPIDevol": 0.0,
+                    "vPIS": 0.0,
+                    "vCOFINS": 0.0,
+                    "vOutro": 0.0,
+                    "vNF": 556.27,
+                    "vTotTrib": 0.0
+                }
+            },
+            "transp": {
+                "modFrete": 0
+            },
+            "cobr": {
+                "fat": {
+                    "nFat": 315798,
+                    "vOrig": 556.27,
+                    "vDesc": 0.0,
+                    "vLiq": 556.27
+                },
+                "dup": [
+                    {
+                        "nDup": 1,
+                        "dVenc": "2026-06-28",
+                        "vDup": 556.27
+                    }
+                ]
+            },
+            "pag": [
+                {
+                    "detPag": {
+                        "tPag": 14,
+                        "vPag": 556.27
+                    }
+                }
+            ],
+            "infRespTec": {
+                "CNPJ": 6787718000156,
+                "xContato": "SISTEMA 365",
+                "email": "suporte@sistema365.com.br",
+                "fone": 6130211525
+            }
+        },
+        "Signature": {
+            "@atributos": {
+                "Id": "ass_infNFe_NFe53260539933336000142550010000062511003157987"
+            },
+            "SignedInfo": {
+                "CanonicalizationMethod": {
+                    "@atributos": {
+                        "Algorithm": "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+                    }
+                },
+                "SignatureMethod": {
+                    "@atributos": {
+                        "Algorithm": "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+                    }
+                },
+                "Reference": {
+                    "@atributos": {
+                        "URI": "#NFe53260539933336000142550010000062511003157987"
+                    },
+                    "Transforms": {
+                        "Transform": [
+                            {
+                                "@atributos": {
+                                    "Algorithm": "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
+                                }
+                            },
+                            {
+                                "@atributos": {
+                                    "Algorithm": "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+                                }
+                            }
+                        ]
+                    },
+                    "DigestMethod": {
+                        "@atributos": {
+                            "Algorithm": "http://www.w3.org/2000/09/xmldsig#sha1"
+                        }
+                    },
+                    "DigestValue": "AgMLODwT7BG06qvuvRrVyY/if34="
+                }
+            },
+            "SignatureValue": "ZWnxCkiJfngpZGcH9d/FXyEdpjrF22jGftBzcgC97eBaV30UcaFiSMPS8EJObLvQea+MBO/WkQo72iBXn0Gk81fmcLB6iCwfCFWDuqyLJnLLR6jSI7YQkYmAEoObcHh8wUYdPQX0Odbg+G+XvSZXhu0FWBPMv3TXwEindD9o/Lrhebf7yZQYxe6dK04k+KPdeF6vbTb8xsHzfJp2GXaKjYG+zEz8qWnnZam2T7gvhq9vvJ5GHIHte6cslZtp6zVboRuB/SIG1QUxpLt4Ywb965iWp/LqrJfEamLTFwhatHKr88ebtfPIU1Xki71JBO2qEROkCGDETs0cos0yvERiZg==",
+            "KeyInfo": {
+                "X509Data": {
+                    "X509Certificate": "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"
+                }
+            }
+        }
+    },
+    "protNFe": {
+        "@atributos": {
+            "versao": "4.00"
+        },
+        "infProt": {
+            "tpAmb": 1,
+            "verAplic": "SVRS2605211109DR",
+            "chNFe": 53260539933336000142550010000062511003157987,
+            "dhRecbto": "2026-05-29T08:19:30-03:00",
+            "nProt": 253260038262259,
+            "digVal": "AgMLODwT7BG06qvuvRrVyY/if34=",
+            "cStat": 100,
+            "xMotivo": "Autorizado o uso da NF-e"
+        }
+    }
+}

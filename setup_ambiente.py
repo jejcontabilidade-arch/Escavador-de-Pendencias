@@ -62,8 +62,18 @@ def find_and_install_certificate():
         
     log_step("Instalando certificado no repositório do Windows (Current User -> Personal)...")
     
-    # Comando PowerShell para importar o PFX
     ps_command = f"""
+    try {{
+        # Remover certificados expirados
+        $expired = Get-ChildItem Cert:\\CurrentUser\\My | Where-Object {{ $_.NotAfter -lt (Get-Date) }}
+        if ($expired) {{
+            $expired | Remove-Item -Force -ErrorAction SilentlyContinue
+            Write-Output "Certificados expirados limpos do repositório."
+        }}
+    }} catch {{
+        # Ignorar erros de limpeza
+    }}
+
     $pfxpath = '{pfx_path}'
     $password = '{password}'
     $secure = ConvertTo-SecureString $password -AsPlainText -Force

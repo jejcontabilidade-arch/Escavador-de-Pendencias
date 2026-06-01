@@ -1,0 +1,9 @@
+{
+    "cnpj": "14730967000133",
+    "nome": "CONDOMINIO JARDIM DAS MANGABEIRAS",
+    "data_consulta": "2026-06-01",
+    "hora_consulta": "11:10:00",
+    "status": "Erro",
+    "detalhes": "Certificado digital expirado ou inválido no portal da NF-e",
+    "contador_falhas_hoje": 2
+}

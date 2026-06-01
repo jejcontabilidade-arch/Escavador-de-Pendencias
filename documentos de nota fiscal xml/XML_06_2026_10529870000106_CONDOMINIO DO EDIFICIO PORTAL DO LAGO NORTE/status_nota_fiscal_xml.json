@@ -1,0 +1,9 @@
+{
+    "cnpj": "10529870000106",
+    "nome": "CONDOMINIO DO EDIFICIO PORTAL DO LAGO NORTE",
+    "data_consulta": "2026-06-01",
+    "hora_consulta": "11:11:10",
+    "status": "Erro",
+    "detalhes": "Certificado digital expirado ou inválido no portal da NF-e",
+    "contador_falhas_hoje": 2
+}

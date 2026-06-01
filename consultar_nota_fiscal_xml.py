@@ -557,8 +557,17 @@ def esperar_captcha(page, client_name, cnpj, step_name, config, destinatario=Non
                         cell = cells.nth(idx)
                         try:
                             cell.scroll_into_view_if_needed()
-                            cell.click(force=True)
-                        except Exception:
+                            box = cell.bounding_box()
+                            if box:
+                                x = box["x"] + box["width"] / 2
+                                y = box["y"] + box["height"] / 2
+                                # Simula movimento humano suave antes de clicar
+                                page.mouse.move(x, y, steps=3)
+                                page.mouse.click(x, y)
+                            else:
+                                cell.click(force=True)
+                        except Exception as e_click:
+                            log(f"Aviso ao clicar via coordenadas: {e_click}. Usando fallback JS...", "WARNING")
                             try:
                                 cell.evaluate("el => el.click()")
                             except Exception:
@@ -1275,6 +1284,63 @@ def sincronizar_e_instalar_certificados_condominios():
     log(f"[MULTICLIENTE] Sincronização concluída. Total de condomínios prontos: {len(condominios_sincronizados)}", "SUCCESS")
     return condominios_sincronizados
 
+def manifestar_ciencia_se_necessario(page):
+    log("Verificando se é necessário realizar a Manifestação do Destinatário (Ciência da Operação)...", "INFO")
+    try:
+        # Procurar se existe algum botão de manifestação na tela
+        btn_manifestacao = None
+        for selector in [
+            "input[value*='Ciência da Operação']",
+            "input[value*='Ciencia da Operacao']",
+            "button:has-text('Ciência da Operação')",
+            "button:has-text('Ciencia da Operacao')",
+            "text=Ciência da Operação",
+            "text=Ciencia da Operacao",
+            "//input[contains(@value, 'Ciência')]",
+            "//button[contains(., 'Ciência')]"
+        ]:
+            try:
+                loc = page.locator(selector).first
+                if loc.is_visible(timeout=2000):
+                    btn_manifestacao = loc
+                    break
+            except Exception:
+                continue
+                
+        if btn_manifestacao:
+            log("Botão 'Ciência da Operação' detectado. Clicando para realizar a manifestação...", "ACTION")
+            btn_manifestacao.click()
+            page.wait_for_timeout(2000)
+            
+            # Confirmar se houver botão ou diálogo na tela
+            btn_confirmar = None
+            for confirm_sel in [
+                "button:has-text('Confirmar')",
+                "button:has-text('Sim')",
+                "input[value='Confirmar']",
+                "input[value='Sim']",
+                "text=Confirmar",
+                "text=Sim"
+            ]:
+                try:
+                    loc = page.locator(confirm_sel).first
+                    if loc.is_visible(timeout=1000):
+                        btn_confirmar = loc
+                        break
+                except Exception:
+                    continue
+            if btn_confirmar:
+                log("Confirmando registro da manifestação...", "ACTION")
+                btn_confirmar.click()
+                page.wait_for_timeout(2000)
+                
+            page.wait_for_load_state("load")
+            log("Manifestação 'Ciência da Operação' registrada com sucesso!", "SUCCESS")
+        else:
+            log("Botão de 'Ciência da Operação' não está visível. A nota pode já estar manifestada.", "INFO")
+    except Exception as e_man:
+        log(f"Aviso ao tentar realizar Manifestação do Destinatário: {e_man}", "WARNING")
+
 def executar_varredura_nfe_para_cliente(page, config, cnpj_cliente, nome_cliente, erros_hoje, destinatario=None):
     today = datetime.date.today().strftime("%Y-%m-%d")
     cnpj_clean = "".join(filter(str.isdigit, cnpj_cliente))
@@ -1444,82 +1510,100 @@ def executar_varredura_nfe_para_cliente(page, config, cnpj_cliente, nome_cliente
         total_chaves = len(chaves)
         log(f"Localizada(s) {total_chaves} chave(s) de manifestação na tela para {nome_cliente}. Iniciando downloads...", "SUCCESS")
         
-        for idx_chave, chave in enumerate(chaves):
-            log(f"--- {nome_cliente}: Processando Chave {idx_chave+1}/{total_chaves}: {chave} ---", "INFO")
-            
-            caminho_xml_existente = buscar_xml_existente_por_chave(chave)
-            if caminho_xml_existente:
-                log(f"Chave {chave} já foi baixada anteriormente em: '{caminho_xml_existente}'. Pulando consulta...", "SUCCESS")
-                dir_existente = os.path.dirname(caminho_xml_existente)
-                caminho_json_esperado = os.path.join(dir_existente, f"{chave}.json")
-                if not os.path.exists(caminho_json_esperado):
-                    log(f"Metadados JSON ausentes para a chave {chave}. Gerando localmente a partir do XML...", "INFO")
-                    converter_xml_nfe_para_json(caminho_xml_existente, caminho_json_esperado)
-                chaves_baixadas += 1
-                sucessos += 1
-                continue
+        download_page = None
+        try:
+            for idx_chave, chave in enumerate(chaves):
+                log(f"--- {nome_cliente}: Processando Chave {idx_chave+1}/{total_chaves}: {chave} ---", "INFO")
                 
-            page.goto("https://www.nfe.fazenda.gov.br/portal/principal.aspx")
-            page.wait_for_load_state("domcontentloaded")
-            
-            page.locator('a[href*="tipoConsulta=resumo"]:visible, a:has-text("Consultar NF-e"):visible').first.click()
-            page.wait_for_load_state("domcontentloaded")
-            
-            input_chave_selector = 'input[name="ctl00$ContentPlaceHolder1$txtChaveAcessoResumo"]'
-            page.wait_for_selector(input_chave_selector)
-            page.locator(input_chave_selector).fill(chave)
-            
-            captcha_nfe_ok = esperar_captcha(page, nome_cliente, cnpj_cliente, f"Consulta Chave {idx_chave+1}", config, destinatario)
-            if not captcha_nfe_ok:
-                log(f"Falha de captcha na chave {chave}. Pulando...", "ERROR")
-                erros_hoje[chave] = ("Erro no Captcha", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                falhas += 1
-                continue
-                
-            log("Clicando em Continuar para carregar a nota...", "INFO")
-            page.locator('input[name="ctl00$ContentPlaceHolder1$btnConsultarHCaptcha"]').first.click()
-            page.wait_for_load_state("domcontentloaded")
-            
-            try:
-                seletor_download = "input#ctl00_ContentPlaceHolder1_btnDownload, input#btnDownload, a#btnDownload, #btnDownload, input[value*='Download'], button:has-text('Download')"
-                page.wait_for_selector(seletor_download, timeout=15000)
-                
-                log("Botão de Download localizado. Clicando...", "INFO")
-                with page.expect_download(timeout=45000) as download_info:
-                    page.locator(seletor_download).first.click()
+                caminho_xml_existente = buscar_xml_existente_por_chave(chave)
+                if caminho_xml_existente:
+                    log(f"Chave {chave} já foi baixada anteriormente em: '{caminho_xml_existente}'. Pulando consulta...", "SUCCESS")
+                    dir_existente = os.path.dirname(caminho_xml_existente)
+                    caminho_json_esperado = os.path.join(dir_existente, f"{chave}.json")
+                    if not os.path.exists(caminho_json_esperado):
+                        log(f"Metadados JSON ausentes para a chave {chave}. Gerando localmente a partir do XML...", "INFO")
+                        converter_xml_nfe_para_json(caminho_xml_existente, caminho_json_esperado)
+                    chaves_baixadas += 1
+                    sucessos += 1
+                    continue
                     
-                download = download_info.value
-                nome_arquivo = download.suggested_filename
+                if not download_page:
+                    log("Abrindo segunda página (aba) para consulta e download das NF-es...", "INFO")
+                    download_page = page.context.new_page()
+                    download_page.set_default_timeout(30000)
+                    download_page.on("dialog", lambda dialog: (log(f"Diálogo aceito na segunda página: '{dialog.message}'", "SYSTEM"), dialog.accept()))
+                    
+                download_page.goto("https://www.nfe.fazenda.gov.br/portal/principal.aspx")
+                download_page.wait_for_load_state("domcontentloaded")
                 
-                temp_xml_path = os.path.join("temp", nome_arquivo)
-                os.makedirs("temp", exist_ok=True)
-                download.save_as(temp_xml_path)
+                download_page.locator('a[href*="tipoConsulta=resumo"]:visible, a:has-text("Consultar NF-e"):visible').first.click()
+                download_page.wait_for_load_state("domcontentloaded")
                 
-                mes_ano = extrair_mes_ano_emissao(temp_xml_path)
+                input_chave_selector = 'input[name="ctl00$ContentPlaceHolder1$txtChaveAcessoResumo"]'
+                download_page.wait_for_selector(input_chave_selector)
+                download_page.locator(input_chave_selector).fill(chave)
                 
-                pasta_destino = os.path.join("documentos de nota fiscal xml", f"XML_{mes_ano}_{cnpj_clean}_{nome_limpo}")
-                os.makedirs(pasta_destino, exist_ok=True)
+                captcha_nfe_ok = esperar_captcha(download_page, nome_cliente, cnpj_cliente, f"Consulta Chave {idx_chave+1}", config, destinatario)
+                if not captcha_nfe_ok:
+                    log(f"Falha de captcha na chave {chave}. Pulando...", "ERROR")
+                    erros_hoje[chave] = ("Erro no Captcha", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                    falhas += 1
+                    continue
+                    
+                log("Clicando em Continuar para carregar a nota...", "INFO")
+                download_page.locator('input[name="ctl00$ContentPlaceHolder1$btnConsultarHCaptcha"]').first.click()
+                download_page.wait_for_load_state("domcontentloaded")
                 
-                caminho_salvar = os.path.join(pasta_destino, nome_arquivo)
-                if os.path.exists(caminho_salvar):
-                    os.remove(caminho_salvar)
-                shutil.move(temp_xml_path, caminho_salvar)
-                
-                log(f"Nota salva com sucesso em: {caminho_salvar}", "SUCCESS")
-                
-                caminho_json = os.path.join(pasta_destino, f"{chave}.json")
-                converter_xml_nfe_para_json(caminho_salvar, caminho_json)
-                
-                if destinatario:
-                    enviar_documento_whatsapp_local(caminho_salvar, nome_arquivo, config, destinatario)
-                
-                chaves_baixadas += 1
-                sucessos += 1
-                
-            except Exception as e_dl:
-                log(f"Falha ao realizar download da chave {chave} para {nome_cliente}: {e_dl}", "ERROR")
-                erros_hoje[chave] = ("Erro no Download", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                falhas += 1
+                try:
+                    # Realizar manifestação automática se a opção estiver disponível antes de verificar o download
+                    manifestar_ciencia_se_necessario(download_page)
+                    
+                    seletor_download = "input#ctl00_ContentPlaceHolder1_btnDownload, input#btnDownload, a#btnDownload, #btnDownload, input[value*='Download'], button:has-text('Download')"
+                    download_page.wait_for_selector(seletor_download, timeout=15000)
+                    
+                    log("Botão de Download localizado. Clicando...", "INFO")
+                    with download_page.expect_download(timeout=45000) as download_info:
+                        download_page.locator(seletor_download).first.click()
+                        
+                    download = download_info.value
+                    nome_arquivo = download.suggested_filename
+                    
+                    temp_xml_path = os.path.join("temp", nome_arquivo)
+                    os.makedirs("temp", exist_ok=True)
+                    download.save_as(temp_xml_path)
+                    
+                    mes_ano = extrair_mes_ano_emissao(temp_xml_path)
+                    
+                    pasta_destino = os.path.join("documentos de nota fiscal xml", f"XML_{mes_ano}_{cnpj_clean}_{nome_limpo}")
+                    os.makedirs(pasta_destino, exist_ok=True)
+                    
+                    caminho_salvar = os.path.join(pasta_destino, nome_arquivo)
+                    if os.path.exists(caminho_salvar):
+                        os.remove(caminho_salvar)
+                    shutil.move(temp_xml_path, caminho_salvar)
+                    
+                    log(f"Nota salva com sucesso em: {caminho_salvar}", "SUCCESS")
+                    
+                    caminho_json = os.path.join(pasta_destino, f"{chave}.json")
+                    converter_xml_nfe_para_json(caminho_salvar, caminho_json)
+                    
+                    if destinatario:
+                        enviar_documento_whatsapp_local(caminho_salvar, nome_arquivo, config, destinatario)
+                    
+                    chaves_baixadas += 1
+                    sucessos += 1
+                    
+                except Exception as e_dl:
+                    log(f"Falha ao realizar download da chave {chave} para {nome_cliente}: {e_dl}", "ERROR")
+                    erros_hoje[chave] = ("Erro no Download", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                    falhas += 1
+        finally:
+            if download_page:
+                try:
+                    download_page.close()
+                    log("Segunda página (aba) de downloads fechada.", "INFO")
+                except Exception as e_close:
+                    log(f"Aviso ao fechar segunda página: {e_close}", "WARNING")
                 
         if chaves_baixadas > 0:
             save_client_status_nota_fiscal_xml(cnpj_cliente, nome_cliente, "Sucesso", f"Baixados {chaves_baixadas} chaves", current_mes_ano)
@@ -1807,6 +1891,7 @@ def main():
                     except: pass
                     
                 log(f"Abrindo Google Chrome nativo para {cond['nome']}...", "SYSTEM")
+                context = None
                 try:
                     context = p.chromium.launch_persistent_context(
                         user_data_dir=user_data_dir,
@@ -1833,12 +1918,20 @@ def main():
                     sucessos_totais += s_c
                     falhas_totais += f_c
                     
-                    context.close()
-                    
                 except Exception as e_launch:
                     log(f"Erro crítico no navegador para {cond['nome']}: {e_launch}", "ERROR")
                     save_client_status_nota_fiscal_xml(cond["cnpj"], cond["nome"], "Erro", f"Erro no navegador: {e_launch}")
                     falhas_totais += 1
+                finally:
+                    if context:
+                        try:
+                            context.close()
+                        except:
+                            pass
+                    limpar_cache_perfil_chrome(user_data_dir, cond['cnpj'])
+                    if idx_cond < total_clientes:
+                        log("[PAUSA] Aguardando 1 minuto (60 segundos) antes de processar o próximo certificado para evitar bloqueios temporários no portal...", "SYSTEM")
+                        time.sleep(60)
                     
         log("\n[MULTICLIENTE] Finalizado processamento de todos os condomínios. Compilando relatório consolidado...", "SUCCESS")
         resultados_finais = compilar_resultados_fiscais()
@@ -1904,6 +1997,7 @@ def main():
                 except: pass
                 
             log("Abrindo Google Chrome nativo em modo visível...", "SYSTEM")
+            context = None
             try:
                 context = p.chromium.launch_persistent_context(
                     user_data_dir=user_data_dir,
@@ -1927,12 +2021,17 @@ def main():
                     page, config, cnpj_cert, nome_cert, erros_hoje, destinatario
                 )
                 
-                context.close()
-                
             except Exception as e_launch:
                 log(f"Erro crítico ao abrir navegador: {e_launch}", "ERROR")
                 salvar_estado_global(False, f"Erro ao iniciar Chrome: {e_launch}", 1, 0, 0, 0)
                 return
+            finally:
+                if context:
+                    try:
+                        context.close()
+                    except:
+                        pass
+                limpar_cache_perfil_chrome(user_data_dir, None)
                 
         resultados_finais = compilar_resultados_fiscais(erros_hoje=erros_hoje, cnpj_cert_ativo=cnpj_cert)
         gerar_excel_resumo(resultados_finais)

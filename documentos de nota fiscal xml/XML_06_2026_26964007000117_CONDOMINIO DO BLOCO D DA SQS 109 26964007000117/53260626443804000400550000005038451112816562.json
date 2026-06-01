@@ -1,0 +1,417 @@
+{
+    "@atributos": {
+        "versao": "4.00"
+    },
+    "NFe": {
+        "infNFe": {
+            "@atributos": {
+                "Id": "NFe53260626443804000400550000005038451112816562",
+                "versao": "4.00"
+            },
+            "ide": {
+                "cUF": 53,
+                "cNF": 11281656,
+                "natOp": "5102 - VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCEIRO",
+                "mod": 55,
+                "serie": 0,
+                "nNF": 503845,
+                "dhEmi": "2026-06-01T08:48:00-03:00",
+                "tpNF": 1,
+                "idDest": 1,
+                "cMunFG": 5300108,
+                "tpImp": 1,
+                "tpEmis": 1,
+                "cDV": 2,
+                "tpAmb": 1,
+                "finNFe": 1,
+                "indFinal": 1,
+                "indPres": 1,
+                "indIntermed": 0,
+                "procEmi": 0,
+                "verProc": "ADM 1.1.5.8 R1"
+            },
+            "emit": {
+                "CNPJ": 26443804000400,
+                "xNome": "SR ACABAMENTOS E MATERIAIS PARA CONSTRUCAO LTDA - SO REPAROS",
+                "xFant": "SO REPAROS - ASA SUL",
+                "enderEmit": {
+                    "xLgr": "QUADRA CRS 512 BLOCO C",
+                    "nro": "SN",
+                    "xCpl": "W3 SUL",
+                    "xBairro": "ASA SUL",
+                    "cMun": 5300108,
+                    "xMun": "BRASILIA",
+                    "UF": "DF",
+                    "CEP": 70361535,
+                    "cPais": 1058,
+                    "xPais": "BRASIL",
+                    "fone": 6132143999
+                },
+                "IE": 731043100443,
+                "CRT": 3
+            },
+            "dest": {
+                "CNPJ": 26964007000117,
+                "xNome": "CONDOMINIO DO BL D DA SQS 109",
+                "enderDest": {
+                    "xLgr": "QUADRA SQS 109 BLOCO D",
+                    "nro": "SN",
+                    "xCpl": "CONDOMINIO",
+                    "xBairro": "ASA SUL",
+                    "cMun": 5300108,
+                    "xMun": "BRASILIA",
+                    "UF": "DF",
+                    "CEP": 70372040,
+                    "cPais": 1058,
+                    "xPais": "BRASIL",
+                    "fone": 6134434177
+                },
+                "indIEDest": 9,
+                "IE": 824190800109
+            },
+            "det": [
+                {
+                    "@atributos": {
+                        "nItem": "1"
+                    },
+                    "prod": {
+                        "cProd": 8470,
+                        "cEAN": 7898927487102,
+                        "xProd": "PALHA ACO NO 1",
+                        "NCM": 68099000,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 2.0,
+                        "vUnCom": 3.01,
+                        "vProd": 6.02,
+                        "cEANTrib": 7898927487102,
+                        "uTrib": "UN",
+                        "qTrib": 2.0,
+                        "vUnTrib": 3.01,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 2.03,
+                        "ICMS": {
+                            "ICMS00": {
+                                "orig": 0,
+                                "CST": 0,
+                                "modBC": 3,
+                                "vBC": 6.02,
+                                "pICMS": 20.0,
+                                "vICMS": 1.2
+                            }
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 6.02,
+                                "pPIS": 1.65,
+                                "vPIS": 0.1
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 6.02,
+                                "pCOFINS": 7.6,
+                                "vCOFINS": 0.46
+                            }
+                        },
+                        "IBSCBS": {
+                            "CST": 0,
+                            "cClassTrib": 1,
+                            "gIBSCBS": {
+                                "vBC": 4.26,
+                                "gIBSUF": {
+                                    "pIBSUF": 0.1,
+                                    "vIBSUF": 0.0
+                                },
+                                "gIBSMun": {
+                                    "pIBSMun": 0.0,
+                                    "vIBSMun": 0.0
+                                },
+                                "vIBS": 0.0,
+                                "gCBS": {
+                                    "pCBS": 0.9,
+                                    "vCBS": 0.04
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "2"
+                    },
+                    "prod": {
+                        "cProd": 8469,
+                        "cEAN": 7898927487072,
+                        "xProd": "PALHA ACO NO 0",
+                        "NCM": 73231000,
+                        "CEST": 1005901,
+                        "CFOP": 5405,
+                        "uCom": "UN",
+                        "qCom": 2.0,
+                        "vUnCom": 3.01,
+                        "vProd": 6.02,
+                        "cEANTrib": 7898927487072,
+                        "uTrib": "UN",
+                        "qTrib": 2.0,
+                        "vUnTrib": 3.01,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 1.99,
+                        "ICMS": {
+                            "ICMS60": {
+                                "orig": 0,
+                                "CST": 60
+                            }
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 6.02,
+                                "pPIS": 1.65,
+                                "vPIS": 0.1
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 6.02,
+                                "pCOFINS": 7.6,
+                                "vCOFINS": 0.46
+                            }
+                        },
+                        "IBSCBS": {
+                            "CST": 0,
+                            "cClassTrib": 1,
+                            "gIBSCBS": {
+                                "vBC": 5.46,
+                                "gIBSUF": {
+                                    "pIBSUF": 0.1,
+                                    "vIBSUF": 0.01
+                                },
+                                "gIBSMun": {
+                                    "pIBSMun": 0.0,
+                                    "vIBSMun": 0.0
+                                },
+                                "vIBS": 0.01,
+                                "gCBS": {
+                                    "pCBS": 0.9,
+                                    "vCBS": 0.05
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "@atributos": {
+                        "nItem": "3"
+                    },
+                    "prod": {
+                        "cProd": 161060,
+                        "cEAN": 7897451460575,
+                        "xProd": "DISCO CORTAG DIAMANTADO PROF.PLUS 200X25,4MM",
+                        "NCM": 68042119,
+                        "CFOP": 5102,
+                        "uCom": "UN",
+                        "qCom": 1.0,
+                        "vUnCom": 172.45,
+                        "vProd": 172.45,
+                        "cEANTrib": 7897451460575,
+                        "uTrib": "UN",
+                        "qTrib": 1.0,
+                        "vUnTrib": 172.45,
+                        "indTot": 1
+                    },
+                    "imposto": {
+                        "vTotTrib": 59.9,
+                        "ICMS": {
+                            "ICMS00": {
+                                "orig": 1,
+                                "CST": 0,
+                                "modBC": 3,
+                                "vBC": 172.45,
+                                "pICMS": 20.0,
+                                "vICMS": 34.49
+                            }
+                        },
+                        "PIS": {
+                            "PISAliq": {
+                                "CST": 1,
+                                "vBC": 172.45,
+                                "pPIS": 1.65,
+                                "vPIS": 2.85
+                            }
+                        },
+                        "COFINS": {
+                            "COFINSAliq": {
+                                "CST": 1,
+                                "vBC": 172.45,
+                                "pCOFINS": 7.6,
+                                "vCOFINS": 13.11
+                            }
+                        },
+                        "IBSCBS": {
+                            "CST": 0,
+                            "cClassTrib": 1,
+                            "gIBSCBS": {
+                                "vBC": 122.01,
+                                "gIBSUF": {
+                                    "pIBSUF": 0.1,
+                                    "vIBSUF": 0.12
+                                },
+                                "gIBSMun": {
+                                    "pIBSMun": 0.0,
+                                    "vIBSMun": 0.0
+                                },
+                                "vIBS": 0.12,
+                                "gCBS": {
+                                    "pCBS": 0.9,
+                                    "vCBS": 1.1
+                                }
+                            }
+                        }
+                    }
+                }
+            ],
+            "total": {
+                "ICMSTot": {
+                    "vBC": 178.47,
+                    "vICMS": 35.69,
+                    "vICMSDeson": 0.0,
+                    "vFCPUFDest": 0.0,
+                    "vICMSUFDest": 0.0,
+                    "vICMSUFRemet": 0.0,
+                    "vFCP": 0.0,
+                    "vBCST": 0.0,
+                    "vST": 0.0,
+                    "vFCPST": 0.0,
+                    "vFCPSTRet": 0.0,
+                    "vProd": 184.49,
+                    "vFrete": 0.0,
+                    "vSeg": 0.0,
+                    "vDesc": 0.0,
+                    "vII": 0.0,
+                    "vIPI": 0.0,
+                    "vIPIDevol": 0.0,
+                    "vPIS": 3.05,
+                    "vCOFINS": 14.03,
+                    "vOutro": 0.0,
+                    "vNF": 184.49,
+                    "vTotTrib": 63.92
+                },
+                "IBSCBSTot": {
+                    "vBCIBSCBS": 131.73,
+                    "gIBS": {
+                        "gIBSUF": {
+                            "vDif": 0.0,
+                            "vDevTrib": 0.0,
+                            "vIBSUF": 0.13
+                        },
+                        "gIBSMun": {
+                            "vDif": 0.0,
+                            "vDevTrib": 0.0,
+                            "vIBSMun": 0.0
+                        },
+                        "vIBS": 0.13,
+                        "vCredPres": 0.0,
+                        "vCredPresCondSus": 0.0
+                    },
+                    "gCBS": {
+                        "vDif": 0.0,
+                        "vDevTrib": 0.0,
+                        "vCBS": 1.19,
+                        "vCredPres": 0.0,
+                        "vCredPresCondSus": 0.0
+                    }
+                }
+            },
+            "transp": {
+                "modFrete": 4,
+                "vol": [
+                    {
+                        "pesoL": 0.34,
+                        "pesoB": 0.34
+                    }
+                ]
+            },
+            "pag": [
+                {
+                    "detPag": {
+                        "indPag": 1,
+                        "tPag": 5,
+                        "vPag": 184.49
+                    }
+                }
+            ],
+            "infAdic": {
+                "infAdFisco": "Subst.trib. decreto 18.955/97 art.321 a 336 anexo 4 caderno I RICMS.;",
+                "infCpl": "PROCON-DF FONE: 151; End. SCS Q 08 Ed. Venancio 200 B-60 SL 240 CEP 70.333-900 Brasilia/DF; N; Acumulativo: R$ 184,49; Vendedor: 44 - CLAUDIO BERNARDES ------- FUNCIONARIO; Tributos aproximados: R$ 32,56 Federal - R$ 31,36 Estadual - R$ 0,00 Municipal - Fonte: IBPT 5oi7eW; PED 6.566.517;"
+            }
+        },
+        "Signature": {
+            "SignedInfo": {
+                "CanonicalizationMethod": {
+                    "@atributos": {
+                        "Algorithm": "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+                    }
+                },
+                "SignatureMethod": {
+                    "@atributos": {
+                        "Algorithm": "http://www.w3.org/2000/09/xmldsig#rsa-sha1"
+                    }
+                },
+                "Reference": {
+                    "@atributos": {
+                        "URI": "#NFe53260626443804000400550000005038451112816562"
+                    },
+                    "Transforms": {
+                        "Transform": [
+                            {
+                                "@atributos": {
+                                    "Algorithm": "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
+                                }
+                            },
+                            {
+                                "@atributos": {
+                                    "Algorithm": "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+                                }
+                            }
+                        ]
+                    },
+                    "DigestMethod": {
+                        "@atributos": {
+                            "Algorithm": "http://www.w3.org/2000/09/xmldsig#sha1"
+                        }
+                    },
+                    "DigestValue": "xIA58HB/B0idjBHoCzWMCsPUxW4="
+                }
+            },
+            "SignatureValue": "mwFjeLK2SsWQOk5CY0PdLPZEyOKyThxYz49RdLN+jXfPO7j+AO1l0cnhE2wQZoZX9FmX02oYvBNd63BYC4GAUhoCDSC8X6G8AH3WmLl/NkewY1Jrl8nMV0rNYO2N2JekjmzReunHKk+pAS1bC+q3BqfbypO/WArfWxuE4VvtRlMDB70RzhhfkLVGQpS6gbqhQKarWquobuDQDsHXcXHz6RnAU/TCK45Fi2qTwJEXn77//wzErFGOnZcdXok8yG61hfGA3o3l5hSofUgdV7bYF65gKRrhBUZDEiAd+nxGW9F73lM68+6jqlkcFSB54dM3CR6EvwTDVDc18GFLXICxGA==",
+            "KeyInfo": {
+                "X509Data": {
+                    "X509Certificate": "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"
+                }
+            }
+        }
+    },
+    "protNFe": {
+        "@atributos": {
+            "versao": "4.00"
+        },
+        "infProt": {
+            "tpAmb": 1,
+            "verAplic": "SVRS2605211109DR",
+            "chNFe": 53260626443804000400550000005038451112816562,
+            "dhRecbto": "2026-06-01T08:53:12-03:00",
+            "nProt": 253260038911285,
+            "digVal": "xIA58HB/B0idjBHoCzWMCsPUxW4=",
+            "cStat": 100,
+            "xMotivo": "Autorizado o uso da NF-e"
+        }
+    }
+}

@@ -1,0 +1,9 @@
+{
+    "cnpj": "37117272000186",
+    "nome": "CONDOMINIO DO BLOCO G DA SQS 402",
+    "data_consulta": "2026-06-01",
+    "hora_consulta": "11:11:04",
+    "status": "Erro",
+    "detalhes": "Chaves encontradas, mas nenhuma baixada",
+    "contador_falhas_hoje": 2
+}

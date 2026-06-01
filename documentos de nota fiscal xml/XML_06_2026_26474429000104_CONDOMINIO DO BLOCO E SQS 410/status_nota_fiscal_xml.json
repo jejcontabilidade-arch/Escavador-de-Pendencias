@@ -1,0 +1,9 @@
+{
+    "cnpj": "26474429000104",
+    "nome": "CONDOMINIO DO BLOCO E SQS 410",
+    "data_consulta": "2026-06-01",
+    "hora_consulta": "11:10:12",
+    "status": "Erro",
+    "detalhes": "Certificado digital expirado ou inválido no portal da NF-e",
+    "contador_falhas_hoje": 2
+}

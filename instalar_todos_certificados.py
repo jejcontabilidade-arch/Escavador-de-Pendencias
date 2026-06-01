@@ -19,6 +19,14 @@ def instalar_todos():
     
     log(f"Encontrados {total_files} certificados na pasta para instalação.", "INFO")
     
+    log("Limpando certificados expirados do repositório do Windows...", "INFO")
+    try:
+        cmd_clean = "powershell -Command \"Get-ChildItem Cert:\\CurrentUser\\My | Where-Object { $_.NotAfter -lt (Get-Date) } | Remove-Item -Force -ErrorAction SilentlyContinue\""
+        subprocess.run(cmd_clean, capture_output=True, shell=True)
+        log("Limpeza de certificados expirados concluída.", "SUCCESS")
+    except Exception as e_clean:
+        log(f"Falha ao limpar certificados expirados: {e_clean}", "WARNING")
+        
     sucessos = 0
     falhas = 0
     

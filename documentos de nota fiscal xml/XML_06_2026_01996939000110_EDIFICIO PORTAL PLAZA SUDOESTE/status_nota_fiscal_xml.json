@@ -1,0 +1,9 @@
+{
+    "cnpj": "01996939000110",
+    "nome": "EDIFICIO PORTAL PLAZA SUDOESTE",
+    "data_consulta": "2026-06-01",
+    "hora_consulta": "11:12:38",
+    "status": "Erro",
+    "detalhes": "Chaves encontradas, mas nenhuma baixada",
+    "contador_falhas_hoje": 1
+}
