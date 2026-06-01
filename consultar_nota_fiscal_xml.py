@@ -363,6 +363,17 @@ def esperar_captcha(page, client_name, cnpj, step_name, config, destinatario=Non
     inicio = time.time()
     
     while time.time() - inicio < limite_tempo:
+        # Verificar se o CAPTCHA já foi resolvido com sucesso pelo usuário
+        # buscando os valores dos inputs de resposta (token)
+        try:
+            token_hcaptcha = page.evaluate("() => { const el = document.querySelector('[name=\"h-captcha-response\"]') || document.getElementById('h-captcha-response'); return el ? el.value : ''; }")
+            token_recaptcha = page.evaluate("() => { const el = document.querySelector('[name=\"g-recaptcha-response\"]') || document.getElementById('g-recaptcha-response'); return el ? el.value : ''; }")
+            if token_hcaptcha or token_recaptcha:
+                log("CAPTCHA resolvido com sucesso (token de resposta detectado na página).", "SUCCESS")
+                return True
+        except Exception as e_token:
+            pass
+            
         # 1. Verificar se há CAPTCHA na tela
         has_hcaptcha = False
         has_recaptcha = False
