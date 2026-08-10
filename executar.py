@@ -305,10 +305,23 @@ def verificar_e_reestabelecer_sessao(page, config):
                 navegar_via_google_para_ecac(page)
             
             # Se o botão de login do Gov.br estiver visível, clica nele
-            btn_gov = page.locator('input[alt="Acesso Gov BR"]').first
-            if btn_gov.is_visible(timeout=5000):
+            btn_gov = None
+            for sel in [
+                'button:has-text("Entrar com gov.br")',
+                'a:has-text("Entrar com gov.br")',
+                'input[alt="Acesso Gov BR"]',
+                'img[alt*="gov.br"]'
+            ]:
+                try:
+                    loc = page.locator(sel).first
+                    if loc.is_visible(timeout=2000):
+                        btn_gov = loc
+                        break
+                except Exception:
+                    continue
+            if btn_gov:
                 log("Botão 'Acesso Gov BR' detectado. Clicando...", "ACTION")
-                btn_gov.click()
+                btn_gov.click(force=True)
                 page.wait_for_timeout(2000)
                 
             # Aguarda o botão do certificado
@@ -1723,9 +1736,27 @@ def realizar_login_manual(config):
         # 1. Aguarda e clica automaticamente no botão de login do Gov.br
         try:
             log("Buscando o botão de login 'Acesso Gov BR'...", "INFO")
-            page.wait_for_selector('input[alt="Acesso Gov BR"]', timeout=10000)
-            log("Clicando no botão de login do Gov.br...", "ACTION")
-            page.click('input[alt="Acesso Gov BR"]')
+            btn_gov = None
+            for sel in [
+                'button:has-text("Entrar com gov.br")',
+                'a:has-text("Entrar com gov.br")',
+                'input[alt="Acesso Gov BR"]',
+                'img[alt*="gov.br"]'
+            ]:
+                try:
+                    loc = page.locator(sel).first
+                    if loc.is_visible(timeout=3000):
+                        btn_gov = loc
+                        break
+                except Exception:
+                    continue
+            
+            if btn_gov:
+                log("Clicando no botão de login do Gov.br...", "ACTION")
+                btn_gov.click(force=True)
+            else:
+                log("Aviso: Botão Gov.br não ficou visível, tentando fallback...", "WARNING")
+                page.click('input[alt="Acesso Gov BR"]', force=True, timeout=5000)
             
             # 2. Aguarda redirecionamento para o Gov.br SSO e o botão "Seu certificado digital"
             log("Aguardando redirecionamento para o portal Gov.br...", "INFO")
