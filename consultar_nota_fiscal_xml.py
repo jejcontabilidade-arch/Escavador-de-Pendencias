@@ -1,4 +1,5 @@
 import os
+from utils_windows import dialogo_certificado_aberto, focar_janela_certificado, press_enter, executar_confirmacao_certificado_em_loop, clean_filename, format_cnpj
 import sys
 import csv
 import time
@@ -36,141 +37,6 @@ def log(msg, level="INFO"):
             f.write(f"[{timestamp}] [{level}] {msg_str}\n")
     except Exception:
         pass
-
-def dialogo_certificado_aberto():
-    import ctypes
-    EnumWindows = ctypes.windll.user32.EnumWindows
-    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
-    GetWindowText = ctypes.windll.user32.GetWindowTextW
-    GetWindowTextLength = ctypes.windll.user32.GetWindowTextLengthW
-    IsWindowVisible = ctypes.windll.user32.IsWindowVisible
-    
-    aberto = [False]
-    
-    def foreach_window(hwnd, lParam):
-        if IsWindowVisible(hwnd):
-            length = GetWindowTextLength(hwnd)
-            buff = ctypes.create_unicode_buffer(length + 1)
-            GetWindowText(hwnd, buff, length + 1)
-            title = buff.value
-            title_lower = title.lower()
-            
-            # Blacklist para evitar planilhas, códigos e editores abertos do usuário
-            blacklist = ["- excel", "- word", "- notepad", "visual studio", "code", ".py", ".xlsx", ".xls", "cmd.exe", "powershell", "escavador"]
-            if any(b in title_lower for b in blacklist):
-                return True
-                
-            termos_cert = ["selecione um certificado", "selecione o certificado", "confirmar certificado", 
-                           "select a certificate", "confirm certificate", "segurança do windows", 
-                           "windows security", "credenciais de segurança", "security credentials", 
-                           "pin do certificado", "insira o pin", "controle de acesso"]
-            if any(t in title_lower for t in termos_cert) or (any(x in title_lower for x in ["certificado", "segurança"]) and not any(b in title_lower for b in blacklist)):
-                aberto[0] = True
-                return False
-        return True
-
-    EnumWindows(EnumWindowsProc(foreach_window), 0)
-    return aberto[0]
-
-def focar_janela_certificado(keywords_browser):
-    import ctypes
-    EnumWindows = ctypes.windll.user32.EnumWindows
-    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
-    GetWindowText = ctypes.windll.user32.GetWindowTextW
-    GetWindowTextLength = ctypes.windll.user32.GetWindowTextLengthW
-    IsWindowVisible = ctypes.windll.user32.IsWindowVisible
-    SetForegroundWindow = ctypes.windll.user32.SetForegroundWindow
-    ShowWindow = ctypes.windll.user32.ShowWindow
-    
-    found_hwnds = []
-    
-    def foreach_window(hwnd, lParam):
-        if IsWindowVisible(hwnd):
-            length = GetWindowTextLength(hwnd)
-            buff = ctypes.create_unicode_buffer(length + 1)
-            GetWindowText(hwnd, buff, length + 1)
-            title = buff.value
-            title_lower = title.lower()
-            
-            # Blacklist para evitar planilhas, códigos e editores abertos do usuário
-            blacklist = ["- excel", "- word", "- notepad", "visual studio", "code", ".py", ".xlsx", ".xls", "cmd.exe", "powershell", "escavador"]
-            if any(b in title_lower for b in blacklist):
-                return True
-                
-            termos_cert = ["selecione um certificado", "selecione o certificado", "confirmar certificado", 
-                           "select a certificate", "confirm certificate", "segurança do windows", 
-                           "windows security", "credenciais de segurança", "security credentials", 
-                           "pin do certificado", "insira o pin", "controle de acesso"]
-            
-            # 1. Diálogos de certificado ou segurança
-            if any(t in title_lower for t in termos_cert) or (any(x in title_lower for x in ["certificado", "segurança"]) and not any(b in title_lower for b in blacklist)):
-                found_hwnds.append((hwnd, title, 2))
-            # 2. Janela do navegador da nossa automação
-            elif any(x in title_lower for x in keywords_browser):
-                found_hwnds.append((hwnd, title, 1))
-        return True
-
-    EnumWindows(EnumWindowsProc(foreach_window), 0)
-    
-    if not found_hwnds:
-        log("[AUTO-LOGIN] Nenhuma janela de certificado ou navegador encontrada para focar.", "WARNING")
-        return False
-        
-    found_hwnds.sort(key=lambda x: x[2], reverse=True)
-    target_hwnd, title, priority = found_hwnds[0]
-    
-    log(f"[AUTO-LOGIN] Janela alvo encontrada (Prioridade {priority}): '{title}'", "SYSTEM")
-    try:
-        current_active = ctypes.windll.user32.GetForegroundWindow()
-        if current_active != target_hwnd:
-            # Simula toque no ALT para liberar o privilégio de SetForegroundWindow no Windows
-            ctypes.windll.user32.keybd_event(0x12, 0, 0, 0)
-            ctypes.windll.user32.keybd_event(0x12, 0, 2, 0)
-            ShowWindow(target_hwnd, 9) # SW_RESTORE
-            SetForegroundWindow(target_hwnd)
-            time.sleep(0.5)
-        else:
-            log("[AUTO-LOGIN] Janela alvo já está ativa. Ignorando refocus.", "SYSTEM")
-        return True
-    except Exception as e:
-        log(f"[AUTO-LOGIN] Erro ao focar janela: {e}", "WARNING")
-        return False
-
-def press_enter(first_char=None):
-    import ctypes
-    focar_janela_certificado(["nota fiscal", "nfe.fazenda", "chrome", "edge"])
-    if first_char:
-        char_upper = first_char.upper()
-        if len(char_upper) == 1 and (char_upper.isalnum() or char_upper == " "):
-            vk_code = ord(char_upper)
-            log(f"Enviando tecla '{char_upper}' (VK: {hex(vk_code)}) para focar no certificado...", "SYSTEM")
-            ctypes.windll.user32.keybd_event(vk_code, 0, 0, 0) # Key Down
-            time.sleep(0.05)
-            ctypes.windll.user32.keybd_event(vk_code, 0, 2, 0) # Key Up
-            time.sleep(0.5)
-            
-    log("Enviando comando ENTER para o Windows...", "SYSTEM")
-    VK_RETURN = 0x0D
-    ctypes.windll.user32.keybd_event(VK_RETURN, 0, 0, 0) # Key Down
-    ctypes.windll.user32.keybd_event(VK_RETURN, 0, 2, 0) # Key Up
-    log("ENTER enviado.", "SYSTEM")
-
-def executar_confirmacao_certificado_em_loop(config, log_prefix):
-    import time
-    first_char = config.get("cert_first_char", "J")
-    log(f"{log_prefix} Iniciando rotina de confirmacao de certificado SSL (Letra: '{first_char}')...", "SYSTEM")
-    
-    # Aguarda 3.5 segundos para a janela do Chrome iniciar o redirecionamento e abrir o diálogo
-    time.sleep(3.5)
-    
-    # Realiza 3 tentativas espaçadas de focar e dar ENTER
-    for attempt in range(1, 4):
-        log(f"{log_prefix} Tentativa {attempt}/3 de confirmacao...", "SYSTEM")
-        press_enter(first_char if attempt == 1 else None)
-        time.sleep(1.5)
-        
-    log(f"{log_prefix} Rotina de confirmacao concluida.", "SUCCESS")
-
 
 # Função para carregar as configurações locais
 def load_config():
@@ -279,20 +145,7 @@ def enviar_documento_whatsapp_local(caminho_arquivo, nome_arquivo, config, desti
     return True
 
 # Limpar o nome da empresa para diretórios seguros
-def clean_filename(name):
-    return "".join(c if c.isalnum() or c in " _-ÇçÁáÉéÍíÓóÚúÃãÕõÂâÊêÔôÀàÜü" else "_" for c in name).strip()
-
 # Formatar CNPJ
-def format_cnpj(cnpj):
-    c = "".join(filter(str.isdigit, str(cnpj)))
-    if 11 < len(c) <= 14:
-        c = c.zfill(14)
-        return f"{c[:2]}.{c[2:5]}.{c[5:8]}/{c[8:12]}-{c[12:]}"
-    elif 0 < len(c) <= 11:
-        c = c.zfill(11)
-        return f"{c[:3]}.{c[3:6]}.{c[6:9]}-{c[9:]}"
-    return cnpj
-
 # Salvar status do processamento do cliente
 def save_client_status_nota_fiscal_xml(cnpj, nome, status, details="", mes_ano=None):
     today = datetime.date.today().strftime("%Y-%m-%d")
@@ -1102,10 +955,35 @@ def sincronizar_e_instalar_certificados_condominios():
         return []
         
     excel_path = os.path.join(caminho_ativo, "Controle_Certificados.xlsx")
-    if not os.path.exists(excel_path):
-        log(f"[MULTICLIENTE] Erro: Planilha de controle '{excel_path}' não localizada.", "ERROR")
-        return []
-        
+    excel_exists = os.path.exists(excel_path)
+    
+    # Tentar obter dados do banco de dados centralizado
+    condominios_db = []
+    try:
+        from database_manager import DatabaseManager
+        db = DatabaseManager()
+        db_clients = db.listar_clientes_ativos()
+        db_condos = [c for c in db_clients if c.get("pfx_path")]
+        if db_condos:
+            for cond in db_condos:
+                condominios_db.append({
+                    "cnpj": cond["cnpj"],
+                    "nome": cond["nome"],
+                    "pfx_path": os.path.abspath(cond["pfx_path"]),
+                    "senha": cond["senha"] or senha_padrao
+                })
+            log(f"[MULTICLIENTE] Carregados {len(condominios_db)} condomínios do banco de dados centralizado.", "SUCCESS")
+    except Exception as e_db:
+        log(f"[MULTICLIENTE] Aviso ao ler condomínios do banco: {e_db}", "WARNING")
+
+    if not excel_exists:
+        if condominios_db:
+            log(f"[MULTICLIENTE] Planilha '{excel_path}' não encontrada. Utilizando {len(condominios_db)} condomínio(s) do banco de dados.", "WARNING")
+            return condominios_db
+        else:
+            log(f"[MULTICLIENTE] Erro: Planilha de controle '{excel_path}' não localizada e nenhum condomínio no banco.", "ERROR")
+            return []
+
     # 1. Obter certificados instalados na máquina do usuário via PowerShell
     certificados_instalados = []
     try:
@@ -1144,7 +1022,7 @@ def sincronizar_e_instalar_certificados_condominios():
             log(f"[MULTICLIENTE] Erro ao ler clientes.csv: {e_csv}", "ERROR")
             
     # 3. Ler planilha Excel
-    condominios_sincronizados = []
+    condominios_excel = []
     try:
         wb = openpyxl.load_workbook(excel_path, data_only=True)
         ws = wb.active
@@ -1270,7 +1148,7 @@ def sincronizar_e_instalar_certificados_condominios():
                     if match_senha:
                         senha_encontrada = match_senha.group(1)
                         
-                    condominios_sincronizados.append({
+                    condominios_excel.append({
                         "cnpj": cnpj_limpo,
                         "nome": nome_val,
                         "pfx_path": os.path.abspath(caminho_pfx_encontrado),
@@ -1281,6 +1159,14 @@ def sincronizar_e_instalar_certificados_condominios():
     except Exception as e_xl:
         log(f"[MULTICLIENTE] Erro ao ler planilha Excel de condomínios: {e_xl}", "ERROR")
         
+    # Mesclar dados de condomínios
+    dict_condos = {}
+    for c in condominios_db:
+        dict_condos[c["cnpj"]] = c
+    for c in condominios_excel:
+        dict_condos[c["cnpj"]] = c
+        
+    condominios_sincronizados = list(dict_condos.values())
     log(f"[MULTICLIENTE] Sincronização concluída. Total de condomínios prontos: {len(condominios_sincronizados)}", "SUCCESS")
     return condominios_sincronizados
 
@@ -1445,6 +1331,9 @@ def executar_varredura_nfe_para_cliente(page, config, cnpj_cliente, nome_cliente
         if not captcha_ok:
             raise Exception("Timeout ou falha na resolução do CAPTCHA na Manifestação")
             
+        log("[CAPTCHA-COOLDOWN] Aguardando 10 segundos pós-resolução de CAPTCHA...", "ACTION")
+        time.sleep(10)
+        
         log("Clicando em Pesquisar...", "INFO")
         btn_pesquisar_selector = 'input[value="Pesquisar"], input[name*="Pesquisar"], input[name*="btnPesquisar"], button:has-text("Pesquisar"), input[name*="btnConsultar"]'
         page.locator(btn_pesquisar_selector).first.click()
@@ -1533,11 +1422,31 @@ def executar_varredura_nfe_para_cliente(page, config, cnpj_cliente, nome_cliente
                     download_page.set_default_timeout(30000)
                     download_page.on("dialog", lambda dialog: (log(f"Diálogo aceito na segunda página: '{dialog.message}'", "SYSTEM"), dialog.accept()))
                     
-                download_page.goto("https://www.nfe.fazenda.gov.br/portal/principal.aspx")
-                download_page.wait_for_load_state("domcontentloaded")
+                # Otimização "Nova Consulta" para chaves subsequentes
+                click_nova_consulta_sucesso = False
+                if idx_chave > 0:
+                    try:
+                        # Buscar botão "Nova Consulta" na tela de detalhes da nota anterior
+                        btn_nova = download_page.locator(
+                            "input#ctl00_ContentPlaceHolder1_btnNovaConsulta, "
+                            "input[value*='Nova Consulta'], "
+                            "button:has-text('Nova Consulta'), "
+                            "text=Nova Consulta"
+                        ).first
+                        if btn_nova.is_visible(timeout=3000):
+                            log("Clicando no botão 'Nova Consulta' para consultar a próxima chave...", "ACTION")
+                            btn_nova.click()
+                            download_page.wait_for_load_state("domcontentloaded")
+                            click_nova_consulta_sucesso = True
+                    except Exception as e_nova:
+                        log(f"Aviso ao tentar clicar em 'Nova Consulta': {e_nova}. Voltando ao menu principal...", "WARNING")
                 
-                download_page.locator('a[href*="tipoConsulta=resumo"]:visible, a:has-text("Consultar NF-e"):visible').first.click()
-                download_page.wait_for_load_state("domcontentloaded")
+                if not click_nova_consulta_sucesso:
+                    download_page.goto("https://www.nfe.fazenda.gov.br/portal/principal.aspx")
+                    download_page.wait_for_load_state("domcontentloaded")
+                    
+                    download_page.locator('a[href*="tipoConsulta=resumo"]:visible, a:has-text("Consultar NF-e"):visible').first.click()
+                    download_page.wait_for_load_state("domcontentloaded")
                 
                 input_chave_selector = 'input[name="ctl00$ContentPlaceHolder1$txtChaveAcessoResumo"]'
                 download_page.wait_for_selector(input_chave_selector)
@@ -1550,6 +1459,10 @@ def executar_varredura_nfe_para_cliente(page, config, cnpj_cliente, nome_cliente
                     falhas += 1
                     continue
                     
+                # Aguardar 10 segundos pós-resolução de CAPTCHA antes de continuar
+                log("[CAPTCHA-COOLDOWN] Aguardando 10 segundos pós-resolução de CAPTCHA antes de continuar...", "ACTION")
+                time.sleep(10)
+                
                 log("Clicando em Continuar para carregar a nota...", "INFO")
                 download_page.locator('input[name="ctl00$ContentPlaceHolder1$btnConsultarHCaptcha"]').first.click()
                 download_page.wait_for_load_state("domcontentloaded")
@@ -1906,6 +1819,13 @@ def main():
                         ],
                         no_viewport=True
                     )
+                    # Aplicar Evasão Stealth
+                    stealth_js = """
+                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                    window.chrome = { runtime: {}, loadTimes: function() {}, csi: function() {}, app: {} };
+                    Object.defineProperty(navigator, 'languages', { get: () => ['pt-BR', 'pt', 'en-US', 'en'] });
+                    """
+                    context.add_init_script(stealth_js)
                     page = context.new_page()
                     page.set_default_timeout(30000)
                     page.on("dialog", lambda dialog: (log(f"Diálogo aceito automaticamente: '{dialog.message}'", "SYSTEM"), dialog.accept()))
@@ -2012,6 +1932,13 @@ def main():
                     ],
                     no_viewport=True
                 )
+                # Aplicar Evasão Stealth
+                stealth_js = """
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                window.chrome = { runtime: {}, loadTimes: function() {}, csi: function() {}, app: {} };
+                Object.defineProperty(navigator, 'languages', { get: () => ['pt-BR', 'pt', 'en-US', 'en'] });
+                """
+                context.add_init_script(stealth_js)
                 page = context.new_page()
                 page.set_default_timeout(30000)
                 page.on("dialog", lambda dialog: (log(f"Diálogo do navegador aceito automaticamente: '{dialog.message}'", "SYSTEM"), dialog.accept()))

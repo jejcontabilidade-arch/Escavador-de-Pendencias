@@ -89,16 +89,22 @@ def obter_status_resumo(config, rodando_atualmente):
     empresa_atual = ""
     
     # Clientes ativos
-    csv_path = config.get("clientes_file", "clientes.csv")
-    if os.path.exists(csv_path):
-        try:
-            with open(csv_path, "r", encoding="utf-8-sig") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    if row.get("ativo", "True").strip().lower() in ["true", "1", "yes", "ativo", "sim", "s"]:
-                        total_ativos += 1
-        except Exception:
-            pass
+    try:
+        from database_manager import DatabaseManager
+        db = DatabaseManager()
+        total_ativos = len(db.listar_clientes_ativos())
+    except Exception as e_db:
+        log(f"Erro ao ler clientes do banco no status: {e_db}", "WARNING")
+        csv_path = config.get("clientes_file", "clientes.csv")
+        if os.path.exists(csv_path):
+            try:
+                with open(csv_path, "r", encoding="utf-8-sig") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        if row.get("ativo", "True").strip().lower() in ["true", "1", "yes", "ativo", "sim", "s"]:
+                            total_ativos += 1
+            except Exception:
+                pass
             
     # Status dos relatórios
     relatorios_dir = config.get("relatorios_dir", "relatorios")
@@ -159,18 +165,24 @@ def obter_status_resumo_nfe(config, processo_xml_ativo):
         except Exception:
             pass
             
-    # Se não houver arquivo de estado ou for antigo, tenta contar a partir de clientes.csv
+    # Se não houver arquivo de estado ou for antigo, tenta contar a partir do banco
     if total == 0:
-        csv_path = config.get("clientes_file", "clientes.csv")
-        if os.path.exists(csv_path):
-            try:
-                with open(csv_path, "r", encoding="utf-8-sig") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        if row.get("ativo", "True").strip().lower() in ["true", "1", "yes", "ativo", "sim", "s"]:
-                            total += 1
-            except Exception:
-                pass
+        try:
+            from database_manager import DatabaseManager
+            db = DatabaseManager()
+            total = len(db.listar_clientes_ativos())
+        except Exception as e_db:
+            log(f"Erro ao ler clientes do banco no status nfe: {e_db}", "WARNING")
+            csv_path = config.get("clientes_file", "clientes.csv")
+            if os.path.exists(csv_path):
+                try:
+                    with open(csv_path, "r", encoding="utf-8-sig") as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            if row.get("ativo", "True").strip().lower() in ["true", "1", "yes", "ativo", "sim", "s"]:
+                                total += 1
+                except Exception:
+                    pass
                 
     status_str = "🟢 EM EXECUÇÃO" if rodando else "🔴 INATIVO"
     resumo = (
@@ -384,6 +396,16 @@ def adicionar_novo_cliente_csv(cnpj, nome, config):
             writer = csv.writer(f)
             writer.writerow([cnpj_clean, nome_clean, "True"])
         log(f"Cliente {nome_clean} ({cnpj_clean}) adicionado com sucesso ao CSV.", "SUCCESS")
+        
+        # Salvar também no banco de dados SQLite
+        try:
+            from database_manager import DatabaseManager
+            db = DatabaseManager()
+            db.salvar_cliente(cnpj_clean, nome_clean, ativo=1)
+            log(f"Cliente {nome_clean} ({cnpj_clean}) adicionado com sucesso ao Banco de Dados.", "SUCCESS")
+        except Exception as e_db:
+            log(f"Erro ao adicionar cliente no Banco de Dados: {e_db}", "ERROR")
+            
         return f"✅ *Cliente adicionado com sucesso!*\n• *Nome:* {nome_clean}\n• *CNPJ/CPF:* {cnpj_clean}\n• *Status:* Ativo"
     except Exception as e:
         log(f"Erro ao adicionar cliente no CSV: {e}", "ERROR")

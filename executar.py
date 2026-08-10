@@ -1,4 +1,5 @@
 import os
+from utils_windows import dialogo_certificado_aberto, focar_janela_certificado, press_enter, executar_confirmacao_certificado_em_loop, clean_filename, format_cnpj
 import sys
 import csv
 import time
@@ -67,137 +68,6 @@ def limpar_processos_automatizados_antigos():
                 log(f"Aviso ao remover {lock_path} (pode já ter sido destravado): {e}", "WARNING")
 
 # Enviar o caractere inicial (se fornecido) e depois a tecla ENTER para o Windows
-def dialogo_certificado_aberto():
-    EnumWindows = ctypes.windll.user32.EnumWindows
-    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
-    GetWindowText = ctypes.windll.user32.GetWindowTextW
-    GetWindowTextLength = ctypes.windll.user32.GetWindowTextLengthW
-    IsWindowVisible = ctypes.windll.user32.IsWindowVisible
-    
-    aberto = [False]
-    
-    def foreach_window(hwnd, lParam):
-        if IsWindowVisible(hwnd):
-            length = GetWindowTextLength(hwnd)
-            buff = ctypes.create_unicode_buffer(length + 1)
-            GetWindowText(hwnd, buff, length + 1)
-            title = buff.value
-            title_lower = title.lower()
-            
-            # Blacklist para evitar planilhas, códigos e editores abertos do usuário
-            blacklist = ["- excel", "- word", "- notepad", "visual studio", "code", ".py", ".xlsx", ".xls", "cmd.exe", "powershell", "escavador"]
-            if any(b in title_lower for b in blacklist):
-                return True
-                
-            termos_cert = ["selecione um certificado", "selecione o certificado", "confirmar certificado", 
-                           "select a certificate", "confirm certificate", "segurança do windows", 
-                           "windows security", "credenciais de segurança", "security credentials", 
-                           "pin do certificado", "insira o pin", "controle de acesso"]
-            if any(t in title_lower for t in termos_cert) or (any(x in title_lower for x in ["certificado", "segurança"]) and not any(b in title_lower for b in blacklist)):
-                aberto[0] = True
-                return False
-        return True
-
-    EnumWindows(EnumWindowsProc(foreach_window), 0)
-    return aberto[0]
-
-def focar_janela_certificado(keywords_browser):
-    EnumWindows = ctypes.windll.user32.EnumWindows
-    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
-    GetWindowText = ctypes.windll.user32.GetWindowTextW
-    GetWindowTextLength = ctypes.windll.user32.GetWindowTextLengthW
-    IsWindowVisible = ctypes.windll.user32.IsWindowVisible
-    SetForegroundWindow = ctypes.windll.user32.SetForegroundWindow
-    ShowWindow = ctypes.windll.user32.ShowWindow
-    
-    found_hwnds = []
-    
-    def foreach_window(hwnd, lParam):
-        if IsWindowVisible(hwnd):
-            length = GetWindowTextLength(hwnd)
-            buff = ctypes.create_unicode_buffer(length + 1)
-            GetWindowText(hwnd, buff, length + 1)
-            title = buff.value
-            title_lower = title.lower()
-            
-            # Blacklist para evitar planilhas, códigos e editores abertos do usuário
-            blacklist = ["- excel", "- word", "- notepad", "visual studio", "code", ".py", ".xlsx", ".xls", "cmd.exe", "powershell", "escavador"]
-            if any(b in title_lower for b in blacklist):
-                return True
-                
-            termos_cert = ["selecione um certificado", "selecione o certificado", "confirmar certificado", 
-                           "select a certificate", "confirm certificate", "segurança do windows", 
-                           "windows security", "credenciais de segurança", "security credentials", 
-                           "pin do certificado", "insira o pin", "controle de acesso"]
-            
-            # 1. Diálogos de certificado ou segurança
-            if any(t in title_lower for t in termos_cert) or (any(x in title_lower for x in ["certificado", "segurança"]) and not any(b in title_lower for b in blacklist)):
-                found_hwnds.append((hwnd, title, 2))
-            # 2. Janela do navegador da nossa automação
-            elif any(x in title_lower for x in keywords_browser):
-                found_hwnds.append((hwnd, title, 1))
-        return True
-
-    EnumWindows(EnumWindowsProc(foreach_window), 0)
-    
-    if not found_hwnds:
-        log("[AUTO-LOGIN] Nenhuma janela de certificado ou navegador encontrada para focar.", "WARNING")
-        return False
-        
-    found_hwnds.sort(key=lambda x: x[2], reverse=True)
-    target_hwnd, title, priority = found_hwnds[0]
-    
-    log(f"[AUTO-LOGIN] Janela alvo encontrada (Prioridade {priority}): '{title}'", "SYSTEM")
-    try:
-        current_active = ctypes.windll.user32.GetForegroundWindow()
-        if current_active != target_hwnd:
-            # Simula toque no ALT para destravar SetForegroundWindow
-            ctypes.windll.user32.keybd_event(0x12, 0, 0, 0)
-            ctypes.windll.user32.keybd_event(0x12, 0, 2, 0)
-            ShowWindow(target_hwnd, 9) # SW_RESTORE
-            SetForegroundWindow(target_hwnd)
-            time.sleep(0.5)
-        else:
-            log("[AUTO-LOGIN] Janela alvo já está ativa. Ignorando refocus.", "SYSTEM")
-        return True
-    except Exception as e:
-        log(f"[AUTO-LOGIN] Erro ao focar janela: {e}", "WARNING")
-        return False
-
-def press_enter(first_char=None):
-    focar_janela_certificado(["e-cac", "cav.receita", "receita federal", "chrome", "edge"])
-    if first_char:
-        char_upper = first_char.upper()
-        if len(char_upper) == 1 and (char_upper.isalnum() or char_upper == " "):
-            vk_code = ord(char_upper)
-            log(f"Enviando tecla '{char_upper}' (VK: {hex(vk_code)}) para focar no certificado...", "SYSTEM")
-            ctypes.windll.user32.keybd_event(vk_code, 0, 0, 0) # Key Down
-            time.sleep(0.05)
-            ctypes.windll.user32.keybd_event(vk_code, 0, 2, 0) # Key Up
-            time.sleep(0.5)
-            
-    log("Enviando comando ENTER para o Windows...", "SYSTEM")
-    VK_RETURN = 0x0D
-    ctypes.windll.user32.keybd_event(VK_RETURN, 0, 0, 0) # Key Down
-    ctypes.windll.user32.keybd_event(VK_RETURN, 0, 2, 0) # Key Up
-    log("ENTER enviado.", "SYSTEM")
-
-def executar_confirmacao_certificado_em_loop(config, log_prefix):
-    import time
-    first_char = config.get("cert_first_char", "J")
-    log(f"{log_prefix} Iniciando rotina de confirmacao de certificado SSL (Letra: '{first_char}')...", "SYSTEM")
-    
-    # Aguarda 3.5 segundos para a janela do Chrome iniciar o redirecionamento e abrir o diálogo
-    time.sleep(3.5)
-    
-    # Realiza 3 tentativas espaçadas de focar e dar ENTER
-    for attempt in range(1, 4):
-        log(f"{log_prefix} Tentativa {attempt}/3 de confirmacao...", "SYSTEM")
-        press_enter(first_char if attempt == 1 else None)
-        time.sleep(1.5)
-        
-    log(f"{log_prefix} Rotina de confirmacao concluida.", "SUCCESS")
-
 # Função auxiliar para fechar modais jQuery UI e Caixa Postal que cobrem a tela
 def fechar_modais_e_overlays(page):
     try:
@@ -448,7 +318,7 @@ def verificar_e_reestabelecer_sessao(page, config):
             import threading
             threading.Thread(
                 target=executar_confirmacao_certificado_em_loop,
-                args=(config, "[AUTO-LOGIN-RETRY]"),
+                args=(config, "[AUTO-LOGIN-RETRY]", ["e-cac", "cav.receita", "receita federal", "chrome", "edge"]),
                 daemon=True
             ).start()
             
@@ -638,16 +508,6 @@ def save_client_status(relatorios_dir, cnpj, nome, status, details=""):
         json.dump(status_data, f, indent=4, ensure_ascii=False)
         
     return client_dir
-
-def format_cnpj(cnpj):
-    if len(cnpj) == 14:
-        return f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}"
-    elif len(cnpj) == 11:
-        return f"{cnpj[:3]}.{cnpj[3:6]}.{cnpj[6:9]}-{cnpj[9:]}"
-    return cnpj
-
-def clean_filename(name):
-    return "".join(c if c.isalnum() or c in " _-ÇçÁáÉéÍíÓóÚúÃãÕõÂâÊêÔôÀàÜü" else "_" for c in name).strip()
 
 def remover_arquivos_fiscais_obsoletos(client_dir, arquivo_mantido_path=None):
     """
@@ -1876,7 +1736,7 @@ def realizar_login_manual(config):
             import threading
             threading.Thread(
                 target=executar_confirmacao_certificado_em_loop,
-                args=(config, "[AUTO-LOGIN]"),
+                args=(config, "[AUTO-LOGIN]", ["e-cac", "cav.receita", "receita federal", "chrome", "edge"]),
                 daemon=True
             ).start()
             
@@ -1998,8 +1858,48 @@ def tentar_logout_ecac(page):
 def main():
     limpar_processos_automatizados_antigos()
     config = load_config()
-    clientes = load_clients(config["clientes_file"])
     
+    # Suporte para filtrar um único cliente via linha de comando
+    cliente_filtro = None
+    if "--cliente" in sys.argv:
+        try:
+            idx = sys.argv.index("--cliente")
+            cliente_filtro = sys.argv[idx + 1]
+        except Exception:
+            pass
+
+    # Carrega do banco de dados centralizado primeiro
+    clientes = []
+    try:
+        from database_manager import DatabaseManager
+        db = DatabaseManager()
+        db_clients = db.listar_clientes_ativos()
+        if db_clients:
+            for c in db_clients:
+                clientes.append({
+                    "cnpj": c["cnpj"],
+                    "nome": c["nome"],
+                    "ativo": bool(c["ativo"])
+                })
+            log(f"Carregados {len(clientes)} clientes do banco de dados centralizado.", "SUCCESS")
+    except Exception as e:
+        log(f"Aviso ao carregar clientes do banco de dados: {e}. Carregando do CSV...", "WARNING")
+
+    if not clientes:
+        clientes = load_clients(config["clientes_file"])
+    
+    if cliente_filtro:
+        filtro_limpo = "".join(filter(str.isdigit, cliente_filtro))
+        if filtro_limpo:
+            clientes = [c for c in clientes if filtro_limpo in "".join(filter(str.isdigit, c.get("cnpj", "")))]
+        else:
+            clientes = [c for c in clientes if cliente_filtro.lower() in c.get("nome", "").lower()]
+            
+        if not clientes:
+            log(f"Nenhum cliente correspondente ao filtro '{cliente_filtro}' foi localizado.", "ERROR")
+            return
+        log(f"Filtro de cliente único aplicado. Processando apenas: {[c['nome'] for c in clientes]}", "SUCCESS")
+        
     if not clientes:
         log("Nenhum cliente ativo para processamento. Finalizando robô.", "WARNING")
         return
@@ -2090,16 +1990,20 @@ def main():
                     "no_viewport": True
                 }
                 
+                suffix = ""
+                if len(clientes) == 1:
+                    suffix = f"_{''.join(filter(str.isdigit, clientes[0]['cnpj']))}"
+
                 if browser_choice == "msedge":
-                    user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_msedge")
+                    user_data_dir = os.path.join(os.getcwd(), "temp", f"chrome_profile_msedge{suffix}")
                     launch_args["channel"] = "msedge"
                     browser_name_readable = "Microsoft Edge nativo"
                 elif browser_choice == "chrome":
-                    user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chrome")
+                    user_data_dir = os.path.join(os.getcwd(), "temp", f"chrome_profile_chrome{suffix}")
                     launch_args["channel"] = "chrome"
                     browser_name_readable = "Google Chrome nativo"
                 else:
-                    user_data_dir = os.path.join(os.getcwd(), "temp", "chrome_profile_chromium")
+                    user_data_dir = os.path.join(os.getcwd(), "temp", f"chrome_profile_chromium{suffix}")
                     browser_name_readable = "Chromium padrão"
                     
                 launch_args["user_data_dir"] = user_data_dir
@@ -2110,7 +2014,14 @@ def main():
                     try:
                         log(f"Abrindo {browser_name_readable} (Tentativa {tentativa}/2)...", "INFO")
                         context = p.chromium.launch_persistent_context(**launch_args)
-                        log(f"Navegador {browser_name_readable} iniciado com sucesso.", "SUCCESS")
+                        # Aplicar Evasão Stealth (navigator.webdriver, chrome.runtime, etc.)
+                        stealth_js = """
+                        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                        window.chrome = { runtime: {}, loadTimes: function() {}, csi: function() {}, app: {} };
+                        Object.defineProperty(navigator, 'languages', { get: () => ['pt-BR', 'pt', 'en-US', 'en'] });
+                        """
+                        context.add_init_script(stealth_js)
+                        log(f"Navegador {browser_name_readable} iniciado com sucesso com Evasão Stealth.", "SUCCESS")
                         break
                     except Exception as e:
                         log(f"Erro ao iniciar o {browser_name_readable} na tentativa {tentativa}: {e}", "WARNING")

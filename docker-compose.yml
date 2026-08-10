@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: escavador_web
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - escavador_data:/app
+    environment:
+      - DISPLAY=:99
+      - PYTHONUNBUFFERED=1
+    command: python app.py
+
+  worker:
+    build: .
+    container_name: escavador_worker
+    restart: unless-stopped
+    depends_on:
+      - web
+    volumes:
+      - escavador_data:/app
+    environment:
+      - DISPLAY=:99
+      - PYTHONUNBUFFERED=1
+    command: python worker_pool.py
+
+volumes:
+  escavador_data:

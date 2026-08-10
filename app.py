@@ -1071,34 +1071,30 @@ def webhook_whatsapp():
                 rodando_nota_fiscal_xml = processo_nota_fiscal_xml is not None and processo_nota_fiscal_xml.poll() is None
             
             def iniciar_callback(forcar_todos=False):
-                global processo_automacao
-                rodando_teste, _ = is_process_running_by_script("executar.py")
-                if rodando_teste or (processo_automacao and processo_automacao.poll() is None):
+                try:
+                    from database_manager import DatabaseManager
+                    db = DatabaseManager()
+                    clientes_ativos = db.listar_clientes_ativos()
+                    if not clientes_ativos:
+                        return False
+                    for c in clientes_ativos:
+                        db.criar_job("e-cac", c["cnpj"], forcar_todos=forcar_todos)
+                    return True
+                except Exception as e:
+                    print(f"Erro ao enfileirar e-CAC: {e}")
                     return False
-                cmd = [sys.executable, "executar.py"]
-                if forcar_todos:
-                    cmd.append("--forcar-todos")
-                    
-                startupinfo = None
-                creationflags = 0
-                if os.name == 'nt':
-                    startupinfo = subprocess.STARTUPINFO()
-                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                    startupinfo.wShowWindow = 1
-                    creationflags = subprocess.CREATE_NEW_CONSOLE
-                    
-                processo_automacao = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    cwd=os.getcwd(),
-                    startupinfo=startupinfo,
-                    creationflags=creationflags
-                )
-                return True
                 
             def parar_callback():
                 global processo_automacao
+                try:
+                    from database_manager import DatabaseManager
+                    db = DatabaseManager()
+                    with db._get_connection() as conn:
+                        conn.execute("UPDATE jobs SET status = 'erro', erro_mensagem = 'Cancelado pelo usuário' WHERE status = 'pendente'")
+                        conn.commit()
+                except Exception:
+                    pass
+                
                 rodando_teste, pids = is_process_running_by_script("executar.py")
                 pids_to_kill = set(pids)
                 if processo_automacao and processo_automacao.poll() is None:
@@ -1115,46 +1111,56 @@ def webhook_whatsapp():
                 return False
  
             def iniciar_xml_callback(forcar_todos=False, destinatario=None, cliente_filtro=None):
-                global processo_nota_fiscal_xml
-                rodando_teste, _ = is_process_running_by_script("consultar_nota_fiscal_xml.py")
-                if rodando_teste or (processo_nota_fiscal_xml and processo_nota_fiscal_xml.poll() is None):
+                try:
+                    from database_manager import DatabaseManager
+                    db = DatabaseManager()
+                    
+                    if cliente_filtro:
+                        filtro_limpo = "".join(filter(str.isdigit, cliente_filtro))
+                        clientes_ativos = db.listar_clientes_ativos()
+                        match_c = None
+                        for cli in clientes_ativos:
+                            if filtro_limpo and filtro_limpo in cli["cnpj"]:
+                                match_c = cli
+                                break
+                            elif not filtro_limpo and cliente_filtro.lower() in cli["nome"].lower():
+                                match_c = cli
+                                break
+                        if match_c:
+                            db.criar_job("nfe_xml", match_c["cnpj"], forcar_todos=forcar_todos, destinatario=destinatario)
+                            return True
+                        return False
+                    else:
+                        clientes_ativos = db.listar_clientes_ativos()
+                        enfileirados = 0
+                        for c in clientes_ativos:
+                            if c.get("pfx_path"):
+                                db.criar_job("nfe_xml", c["cnpj"], forcar_todos=forcar_todos, destinatario=destinatario)
+                                enfileirados += 1
+                        return enfileirados > 0
+                except Exception as e:
+                    print(f"Erro ao enfileirar NFe: {e}")
                     return False
-                cmd = [sys.executable, "consultar_nota_fiscal_xml.py", "--condominios"]
-                if forcar_todos:
-                    cmd.append("--forcar-todos")
-                if destinatario:
-                    cmd.extend(["--destinatario", destinatario])
-                if cliente_filtro:
-                    cmd.extend(["--cliente", cliente_filtro])
-                    
-                startupinfo = None
-                creationflags = 0
-                if os.name == 'nt':
-                    startupinfo = subprocess.STARTUPINFO()
-                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                    startupinfo.wShowWindow = 1
-                    creationflags = subprocess.CREATE_NEW_CONSOLE
-                    
-                processo_nota_fiscal_xml = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    cwd=os.getcwd(),
-                    startupinfo=startupinfo,
-                    creationflags=creationflags
-                )
-                return True
                 
             def parar_xml_callback():
                 global processo_nota_fiscal_xml
+                try:
+                    from database_manager import DatabaseManager
+                    db = DatabaseManager()
+                    with db._get_connection() as conn:
+                        conn.execute("UPDATE jobs SET status = 'erro', erro_mensagem = 'Cancelado pelo usuário' WHERE status = 'pendente'")
+                        conn.commit()
+                except Exception:
+                    pass
+                
                 rodando_teste, pids = is_process_running_by_script("consultar_nota_fiscal_xml.py")
                 
-                # Fechar Chrome do perfil de Nota Fiscal XML
+                # Fechar Chrome do perfil de Nota Fiscal XML e outros perfis de condomínios
                 try:
                     cmd_chrome = (
                         'powershell -NoProfile -Command "'
                         'Get-CimInstance Win32_Process -Filter \\"Name = \'chrome.exe\' or Name = \'chromedriver.exe\'\\" '
-                        '| Where-Object { $_.CommandLine -like \'*chrome_profile_nota_fiscal_xml*\' } '
+                        '| Where-Object { $_.CommandLine -like \'*chrome_profile_nota_fiscal_xml*\' or $_.CommandLine -like \'*chrome_profile_1*\' or $_.CommandLine -like \'*chrome_profile_2*\' or $_.CommandLine -like \'*chrome_profile_3*\' or $_.CommandLine -like \'*chrome_profile_4*\' or $_.CommandLine -like \'*chrome_profile_5*\' or $_.CommandLine -like \'*chrome_profile_6*\' or $_.CommandLine -like \'*chrome_profile_7*\' or $_.CommandLine -like \'*chrome_profile_8*\' or $_.CommandLine -like \'*chrome_profile_9*\' or $_.CommandLine -like \'*chrome_profile_0*\' } '
                         '| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"'
                     )
                     subprocess.run(cmd_chrome, shell=True, capture_output=True)
@@ -1679,6 +1685,14 @@ if __name__ == "__main__":
             tunnel_manager.start()
         except Exception as e:
             print(f"Erro ao iniciar o túnel de webhook: {e}")
+            
+        try:
+            import threading
+            import worker_pool
+            threading.Thread(target=worker_pool.iniciar_worker_pool, daemon=True).start()
+            print("[SYSTEM] Worker Pool do Escavador iniciado com sucesso em background.")
+        except Exception as e:
+            print(f"Erro ao iniciar o Worker Pool: {e}")
 
     # Iniciar servidor local
     print("Iniciando Painel Web local na porta 5000...")

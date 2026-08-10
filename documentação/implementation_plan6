@@ -1,0 +1,78 @@
+# Plano de Arquitetura e Reestruturação — Escavador de Pendências (Fase Avançada)
+
+Este plano detalha o plano de migração do sistema sequencial baseado em arquivos de texto/CSV para uma infraestrutura profissional baseada em **Banco de Dados (SQL)**, **Fila de Tarefas Assíncronas (Queue/Workers)**, **Integração com API DF-e** e **Evasão Avançada (Stealth & Docker)**.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Fila de Tarefas no Windows**: Para rodar de forma nativa e sem fricção no Windows (evitando a necessidade de instalar e configurar serviços complexos como Redis e Celery), utilizaremos uma **fila gerenciada via Banco de Dados (SQLite)** com um `Thread/Process Pool` em Python. Se preferir rodar em ambiente de nuvem Linux futuramente, a mesma estrutura pode ser empacotada no Docker com suporte a PostgreSQL/Redis.
+
+> [!WARNING]
+> **API de DF-e (FocusNFe / Arquivei)**: A integração com APIs oficiais requer chaves de acesso e credenciais de provedores contratados. Implementaremos uma camada abstrata de API (`nfe_api.py`) estruturada para se conectar a provedores como FocusNFe, configurando o robô Playwright atual como "Plano B" (contingência) automático sempre que a API retornar falha ou indisponibilidade.
+
+---
+
+## Proposed Changes
+
+---
+
+### Componente 1: Banco de Dados Centralizado (SQL)
+
+#### [NEW] [database_manager.py](file:///c:/Users/jejco/Desktop/Escavador%20de%20Pendencias/database_manager.py)
+* Criar classe `DatabaseManager` (usando `sqlite3` nativo do Python) para gerenciar o banco de dados `escavador.db`.
+* **Tabelas do Banco**:
+  1. `clientes`: `id`, `cnpj`, `nome`, `ativo`, `pfx_path`, `senha_pfx`, `data_validade_certificado`, `criado_em`, `atualizado_em`.
+  2. `notas_fiscais`: `id`, `chave_acesso`, `numero_nf`, `serie`, `data_emissao`, `cnpj_emitente`, `nome_emitente`, `cnpj_destinatario`, `nome_destinatario`, `valor_produtos`, `valor_nota`, `caminho_xml`, `data_captura`.
+  3. `alertas_caixa_postal`: `id`, `cnpj_cliente`, `assunto`, `conteudo`, `data_captura`, `resolvido` (bool).
+  4. `jobs`: `id`, `tipo_job` (e-cac, nfe_xml), `cnpj_cliente`, `status` (pendente, rodando, sucesso, erro), `tentativas`, `erro_mensagem`, `criado_em`, `iniciado_em`, `finalizado_em`.
+
+#### [MODIFY] [agente_escavador.py](file:///c:/Users/jejco/Desktop/Escavador%20de%20Pendencias/agente_escavador.py)
+* Alterar o agente do WhatsApp para buscar informações consultando diretamente as tabelas `notas_fiscais` e `alertas_caixa_postal` via `DatabaseManager`, em vez de varrer pastas e abrir arquivos JSON/TXT físicos.
+
+---
+
+### Componente 2: Fila de Tarefas Assíncrona e Paralelismo
+
+#### [NEW] [worker_pool.py](file:///c:/Users/jejco/Desktop/Escavador%20de%20Pendencias/worker_pool.py)
+* Implementar o motor de execução paralela:
+  * Um script persistente que monitora a tabela `jobs` do banco.
+  * Utiliza `concurrent.futures.ThreadPoolExecutor` ou `ProcessPoolExecutor` para lançar as automações de cada cliente de forma paralela (ex: até 3 condomínios simultaneamente).
+  * Salva o log de progresso e o status final (`sucesso` / `erro`) diretamente no banco de dados.
+
+---
+
+### Componente 3: API de DF-e com Fallback Playwright
+
+#### [NEW] [nfe_api.py](file:///c:/Users/jejco/Desktop/Escavador%20de%20Pendencias/nfe_api.py)
+* Criar módulo unificado para download de XML:
+  * Método `baixar_notas_api(cnpj, certificado_pfx, senha)` que tenta obter os XMLs através de provedor de API (ex: FocusNFe / Receita).
+  * Se o retorno da API for bem-sucedido, salva as notas e metadados no banco de dados.
+  * Se falhar, faz o fallback automático invocando a automação Playwright (`consultar_nota_fiscal_xml.py`) como contingência.
+
+---
+
+### Componente 4: Playwright Stealth Evasion e Dockerização
+
+#### [MODIFY] [consultar_nota_fiscal_xml.py](file:///c:/Users/jejco/Desktop/Escavador%20de%20Pendencias/consultar_nota_fiscal_xml.py) e [executar.py](file:///c:/Users/jejco/Desktop/Escavador%20de%20Pendencias/executar.py)
+* **Stealth**: Injetar scripts de evasão logo no carregamento das páginas para ocultar assinaturas de automação (`navigator.webdriver`, `chrome.runtime`, etc.), ou integrar a biblioteca `playwright-stealth`.
+
+#### [NEW] [Dockerfile](file:///c:/Users/jejco/Desktop/Escavador%20de%20Pendencias/Dockerfile) e [docker-compose.yml](file:///c:/Users/jejco/Desktop/Escavador%20de%20Pendencias/docker-compose.yml)
+* Configuração do container Docker:
+  * Base `mcr.microsoft.com/playwright:v1.44.0-jammy` (ou similar) com Python instalado.
+  * Script de inicialização (`entrypoint.sh`) que inicia o servidor virtual de tela `Xvfb` (para prover o display virtual exigido pelos diálogos de certificado SSL do navegador Chromium) antes de iniciar os workers de fila.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+1. **Database Tests**: Criar `test_database.py` para validar inserções, buscas e atualizações nas tabelas SQL.
+2. **Queue Engine Tests**: Simular inserção de múltiplos jobs na fila e certificar-se de que os workers executam de forma paralela sem colisões de escrita no SQLite (usando modo `WAL` do banco de dados).
+
+### Manual Verification
+- Iniciar o `worker_pool.py` e enviar uma mensagem no WhatsApp solicitando varredura.
+- Verificar se as tarefas são inseridas na tabela `jobs` do banco e se o worker executa o download da nota fiscal e atualiza o banco de dados em tempo real.
+- Iniciar a consulta usando a API de DF-e simulada/homologação e constatar a ativação automática do robô Playwright de contingência em caso de falha de conexão na API.
+- Rodar o container local via Docker Desktop para confirmar a emulação visual usando o driver Xvfb e a instalação automática de dependências.

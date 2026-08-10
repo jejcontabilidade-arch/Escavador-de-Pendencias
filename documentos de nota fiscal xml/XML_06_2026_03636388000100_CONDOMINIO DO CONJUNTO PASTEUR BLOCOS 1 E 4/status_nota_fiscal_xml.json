@@ -2,8 +2,8 @@
     "cnpj": "03636388000100",
     "nome": "CONDOMINIO DO CONJUNTO PASTEUR BLOCOS 1 E 4",
     "data_consulta": "2026-06-01",
-    "hora_consulta": "11:09:30",
-    "status": "Sucesso",
-    "detalhes": "Preservado (Erro na nova consulta)",
-    "contador_falhas_hoje": 0
+    "hora_consulta": "12:41:48",
+    "status": "Erro",
+    "detalhes": "Certificado digital expirado ou inválido no portal da NF-e",
+    "contador_falhas_hoje": 2
 }
